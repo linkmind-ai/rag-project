@@ -2,3 +2,4 @@ embedding/documents/
 retrieval/documents/
 .idea
 .venv
+.env

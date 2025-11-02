@@ -1,0 +1,43 @@
+# -----------------------------------------------------------------
+# Python RAG Pipeline Requirements (Stable Versions / ES Only)
+# -----------------------------------------------------------------
+# (ChromaDB 관련 라이브러리 제외됨)
+#
+# pip install -r requirements.txt
+# -----------------------------------------------------------------
+
+# --- .env 파일 로드 ---
+python-dotenv==1.0.1
+
+# --- Core LangChain (0.1.x 안정 버전) ---
+langchain==0.1.20
+
+# --- LangChain Modular Integrations (0.1.x대에 호환) ---
+langchain-google-genai==0.0.11
+langchain-huggingface==0.0.3
+
+# --- Vector DBs & Search ---
+# ⚠️ Elasticsearch가 유일한 벡터 DB입니다.
+elasticsearch==8.13.1
+rank_bm25==0.2.2
+FlagEmbedding==1.2.9
+
+# --- LLM & Embedding Models (Core) ---
+transformers==4.41.2
+sentence-transformers==2.7.0
+torch==2.2.2
+google-generativeai==0.4.1
+ollama==0.3.0
+
+# --- Data Processing (Notion & Text) ---
+requests==2.32.3
+keybert==0.8.4
+kiwipiepy==0.16.2
+
+# --- Utilities ---
+scikit-learn==1.5.0
+
+# --- Development & Testing Environment ---
+pytest==8.2.2
+pytest-mock==3.14.0
+jupyterlab==4.2.1
