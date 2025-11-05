@@ -82,24 +82,3 @@ def run_hyde_pipeline(question, es_client, tokenizer, model):
     except Exception as e:
         print(f"❌ OLLAMA (RAG) 호출 오류: {e}")
         return None  # 👈 [추가] 오류 시 None 반환
-
-
-if __name__ == "__main__":
-    print("--- 1. ES RAG 파이프라인 시작 ---")
-
-    # 1. Elasticsearch 클라이언트 가져오기
-    es_client = elasticsearch_manager.get_es_client()
-
-    # 2. 임베딩 모델 로드하기
-    tokenizer, model = elasticsearch_manager.get_embedding_model()
-
-    if es_client and tokenizer and model:
-        print("\n--- 2. RAG 파이프라인 실행 (Q1) ---")
-        question_1 = "AI의 가치 정렬(value alignment) 문제는 구체적으로 어떤 우려를 말하나요?"
-        run_hyde_pipeline(question_1, es_client, tokenizer, model)
-
-        print("\n--- 3. RAG 파이프라인 실행 (Q2) ---")
-        question_2 = "단일성 정체감의 장애 현상은 어떻게 나타나는가?"
-        run_hyde_pipeline(question_2, es_client, tokenizer, model)
-    else:
-        print("❌ ES 클라이언트 또는 임베딩 모델 로드에 실패했습니다. config.py를 확인하세요.")
