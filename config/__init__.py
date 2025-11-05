@@ -38,4 +38,7 @@ CHROMA_EMBEDDING_MODEL = "jhgan/ko-sbert-sts"
 RERANKER_MODEL = "BAAI/bge-reranker-base"
 OLLAMA_MODEL = "hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:Q4_K_M"
 
+# Pytest
+TEST_NOTION_PAGE_ID = "1dd124ddd3138059983afff89ceb5ea4"
+
 print("✅ [Config] 설정이 .env 파일과 config 패키지로부터 로드되었습니다.")

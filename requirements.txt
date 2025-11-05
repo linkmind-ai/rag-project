@@ -32,7 +32,9 @@ ollama==0.3.0
 # --- Data Processing (Notion & Text) ---
 requests==2.32.3
 keybert==0.8.4
-kiwipiepy==0.16.2
+# kiwipiepy==0.16.2  <-- 제거
+konlpy==0.6.0       # <-- 추가 (Java 기반 형태소 분석기)
+JPype1==1.5.0       # <-- 추가 (konlpy 실행에 필수)
 
 # --- Utilities ---
 scikit-learn==1.5.0
