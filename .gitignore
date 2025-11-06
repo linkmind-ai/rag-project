@@ -1,2 +1,12 @@
 embedding/documents/
 retrieval/documents/
+template/repository
+.env
+*.env
+.env.*.env
+*.env
+.env.*
+config.local.json
+*.secret.*
+*.key
+*.pem
