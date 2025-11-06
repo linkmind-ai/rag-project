@@ -16,13 +16,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 ES_HOST      = os.getenv("ES_HOST")
-ES_ID        = os.getenv("ES_ID")          # 있으면 사용
-ES_API_KEY   = os.getenv("ES_API_KEY")     # 있으면 사용
+ES_ID        = os.getenv("ES_ID")          
+ES_API_KEY   = os.getenv("ES_API_KEY")     
 ES_INDEX     = os.getenv("ES_INDEX_NAME", "vector-test-index")
-TXT_PATH     = os.getenv("TXT_PATH", "notion_page_content.txt")
 CONTENTS_PATH = os.getenv("NOTION_CONTENTS_PATH")
 TXT_PATH = os.getenv("NOTION_TXT_PATH", "notion_page_content.txt")
 JSON_PATH = os.getenv("NOTION_JSON_PATH", "notion_page_content.json")
+VEC_DIMS = os.getenv("VEC_DIMS")
 
 with open("template/common/config.json", "r") as f:
     cfg = json.load(f)
@@ -130,7 +130,7 @@ if not es.indices.exists(index=index_name):
                 "content": {"type": "text"},
                 "embedding": {
                     "type": "dense_vector",
-                    "dims": cfg["es"]["vec_dims"],
+                    "dims": VEC_DIMS,
                     "index": True,
                     "similarity": "cosine",
                 }

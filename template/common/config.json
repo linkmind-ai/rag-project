@@ -1,0 +1,8 @@
+{
+    "model": {
+        "keyword": "jhgan/ko-sroberta-multitask",
+        "embedding": "sentence-transformers/all-MiniLM-L6-v2",
+        "reranker": "BAAI/bge-reranker-base",
+        "generation": "hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:Q4_K_M"
+    }
+}

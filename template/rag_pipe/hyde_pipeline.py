@@ -1,4 +1,5 @@
 import json
+import os
 from langchain.prompts import PromptTemplate
 import ollama
 
@@ -7,13 +8,16 @@ from prompts.rag_prompts import *
 
 with open("template/common/config.json", "r") as f:
     cfg = json.load(f)
+    
+# 환경변수 불러오기
+ES_HOST = os.getenv("ES_HOST")
 
 # 쿼리 실행
 question = input("질문을 입력하세요: ")
 
 prompt = PromptTemplate.from_template(INITIAL_RESPONSE_PROMPT)
 
-client = ollama.Client(host=cfg["es"]["host"])
+client = ollama.Client(host=ES_HOST)
 
 response = client.chat(
     model=cfg["model"]["generation"],
