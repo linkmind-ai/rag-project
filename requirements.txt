@@ -43,3 +43,7 @@ scikit-learn==1.5.0
 pytest==8.2.2
 pytest-mock==3.14.0
 jupyterlab==4.2.1
+
+# --- API Server (NEW) ---
+fastapi==0.111.0
+uvicorn==0.30.1
