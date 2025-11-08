@@ -1,142 +1,223 @@
-### 개요
-이 레포는 Notion 문서를 수집·정제하고, 한국어 키워드/청크 생성 → 벡터 임베딩 → Elasticsearch(k‑NN) 색인 → HyDE 확장 질의 → ES 검색 → Ollama로 최종 응답 생성까지의 RAG 파이프라인을 담고 있습니다.
 
----
 
-### 최상위 디렉터리 구조와 역할
-- `config/`
-  - `.env`에서 비밀값/경로를 로드하고 전역 설정(상수, 모델명 등)을 노출합니다.
-  - 파일: `config/__init__.py`
-- `notion_loader.py`
-  - Notion API로 페이지/블록을 재귀 수집하고, 텍스트를 추출합니다.
-- `text_processor.py`
-  - 한국어 전처리: 제목 헤더 분할, `Okt` 명사 추출, `KeyBERT` 키워드 추출, `RecursiveCharacterTextSplitter`로 청킹.
-- `elasticsearch_manager.py`
-  - ES 클라이언트 생성, 임베딩 모델 로드(HF Transformers), 텍스트 임베딩, 인덱스 생성/삭제, 색인/조회 유틸.
-- `search_pipeline.py`
-  - ES 9.x k‑NN 검색(벡터 필드)을 호출해 `langchain.schema.Document` 목록으로 반환.
-- `run_hyde_search.py`
-  - HyDE(가상 응답)로 질의를 확장 → 임베딩 → ES k‑NN 검색 → Ollama로 최종 답변 생성.
-- `main_workflow.py`
-  - (오프라인 준비 단계) Notion → 파일 저장 → 텍스트 로드/청킹/키워드 → ES 인덱싱까지의 배치 파이프라인.
-- `tests/`
-  - 단위/통합 테스트. 실제 외부 자원(ES/Notion/Ollama)을 쓰는 테스트는 `integration` 마커.
-- 그 외
-  - `utils/`, `rag_pipe/`, `logs/`: 보조 유틸/파이프라인/로그 디렉터리(현재 세부 구현은 제공 파일에 없음).
-  - `requirements.txt`, `pytest.ini`, `README.md` 등 프로젝트 설정/문서.
+# Notion RAG 파이프라인 (Elasticsearch & Ollama)
 
----
+### 📖 개요
 
-### 설정과 환경변수 (`config/__init__.py`)
-- .env에서 로드되는 주요 변수
-  - `NOTION_TOKEN`, `ES_API_KEY`, `ES_ID`, `ES_HOST`, `OLLAMA_HOST`
-  - 경로: `JSON_SAVE_PATH`, `TXT_SAVE_PATH`, `CHROMA_DB_PATH`
-- 상수
-  - `NOTION_VERSION`, `ES_INDEX_NAME = "vector-test-index"`, `ES_EMBEDDING_DIMS = 384`
-  - 모델: `KEYBERT_MODEL`, `ES_EMBEDDING_MODEL`, `CHROMA_EMBEDDING_MODEL`, `RERANKER_MODEL`, `OLLAMA_MODEL`
-- 로드 실패 시 바로 예외를 던지도록 방어적으로 설계되어 있습니다.
+이 프로젝트는 Notion 문서를 수집·정제하고, Elasticsearch를 벡터 DB로 사용하여 RAG(Retrieval-Augmented Generation) 파이프라인을 구축하는 것을 목표로 합니다.
 
----
+**핵심 기능:**
 
-### 데이터 파이프라인 1: 오프라인 색인(배치)
-진입점: `main_workflow.py`
-1) Notion 수집 및 저장
-- `run_notion_to_file()`
-  - 입력된 Notion `page_id`로 `notion_loader.get_page_content`/`fetch_all_blocks` 수행
-  - 페이지 메타(JSON)와 추출 텍스트(TXT)를 각각 `JSON_SAVE_PATH`/`TXT_SAVE_PATH`에 저장
+  * **ETL:** Notion API로 문서를 수집, `Okt`와 `KeyBERT`로 한국어 텍스트를 처리(청킹, 키워드 추출)하여 `Elasticsearch`에 벡터로 색인합니다.
+  * **RAG:** `Ollama`를 사용하여 사용자 질문을 HyDE(가상 문서)로 확장하고, `Elasticsearch` (k-NN)에서 관련 문서를 검색한 뒤, `Ollama`가 검색된 컨텍스트를 기반으로 최종 답변을 생성합니다.
 
-2) 텍스트 처리 → 청킹 → ES 색인
-- `run_process_and_index()`
-  - `text_processor.load_text_from_file(TXT_SAVE_PATH)`
-  - `text_processor.chunk_text_with_recursive_splitter(...)`로 문서 헤더 기반 세분화 + 키워드 메타 부착
-  - `elasticsearch_manager.get_es_client()` / `get_embedding_model()`로 ES와 임베딩 모델 준비
-  - `elasticsearch_manager.create_es_index(...)`로 인덱스 생성 후 `index_documents(...)`로 색인
-  - 색인 완료 후 `search_all_docs(...)`로 등록 내용 확인
+-----
 
-임베딩/ES 세부
-- 임베딩: `transformers`의 `AutoTokenizer`/`AutoModel`로 CLS 평균(pooling)하여 리스트 반환
-- 인덱스 매핑: `dense_vector(dims=ES_EMBEDDING_DIMS, similarity=cosine, index=True)`
+### 🚀 1. 빠른 시작: 설치 및 환경 설정
 
----
+새로운 팀원이 프로젝트를 실행하기 위한 단계입니다.
 
-### 데이터 파이프라인 2: 온라인 검색 + 생성(RAG)
-진입점: `run_hyde_search.py`
-1) HyDE(확장 질의)
-- Ollama(`config.OLLAMA_HOST`, `config.OLLAMA_MODEL`)로 질문에 대한 “요약된 가상 답변” 생성
-- 실패 시 원문 질문으로 대체
+#### 1.1. 프로젝트 복제
 
-2) 벡터화 후 ES k‑NN 검색
-- `elasticsearch_manager.embed_text(...)`로 확장 질의 임베딩
-- `search_pipeline.search_es_knn(es_client, query_vector, index_name=ES_INDEX_NAME, k=3)` 호출
-- 상위 k개를 `Document` 리스트로 수집
+```bash
+git clone [YOUR_REPOSITORY_URL]
+cd rag-project
+```
 
-3) 최종 답변 생성
-- 컨텍스트를 포함한 프롬프트로 Ollama `client.chat()` 호출 → 문자열 응답 반환
+#### 1.2. `.env` 파일 생성 (필수)
 
----
+프로젝트 루트에 `.env` 파일을 생성하고, 아래 `.env.example` 내용을 복사한 뒤, 팀 리더에게 공유받은 실제 비밀 키를 채워 넣습니다.
 
-### 핵심 모듈별 요약
-- `notion_loader.py`
-  - `get_page_content`, `fetch_all_blocks`, `extract_text_content`
-  - Notion 블록 트리를 재귀 순회, 다양한 블록 타입을 텍스트에 반영(제목, 리스트, 코드 등)
-- `text_processor.py`
-  - `Okt`로 명사 추출 → `KeyBERT(SBERT)`로 키워드 추출
-  - `split_text_with_headers`로 "### 제목 ###" 기반 분할 + 키워드 메타 생성
-  - `chunk_text_with_recursive_splitter`로 세부 청킹 후 `langchain.Document`로 반환
-- `elasticsearch_manager.py`
-  - `get_es_client`(API Key, TLS 검증 off 옵션), `get_embedding_model`
-  - `embed_text`(mean pooling), `create_es_index`, `index_documents`, `search_all_docs`, `delete_all_docs`
-- `search_pipeline.py`
-  - ES 9.x `knn` 쿼리 작성/호출, `_source_excludes=['embedding']`로 네트워크 비용 절감
-- `run_hyde_search.py`
-  - HyDE → 임베딩 → ES 검색 → Ollama 응답까지 end‑to‑end
+**`.env.example` (이 양식을 `.env` 파일로 복사):**
 
----
+```ini
+# --- Secrets (팀 공유 필요) ---
+NOTION_TOKEN="ntn_YOUR_NOTION_INTEGRATION_TOKEN"
+ES_API_KEY="YOUR_ELASTICSEARCH_API_KEY"
+ES_ID="YOUR_ELASTICSEARCH_API_KEY_ID"
 
-### 테스트 구조(`tests/`)
-- `test_search_pipeline.py`
-  - 단위 테스트: ES 클라이언트 mock으로 `knn` 파라미터/반환 형식(`Document`) 검증
-- `test_integration.py` (pytest `-m integration`)
-  - Notion API 연결/수신 확인
-  - ES API 연결 및 버전 확인(예: `9.1.5`)
-  - ES k‑NN 색인→검색→삭제 사이클
-  - 전체 RAG 파이프라인: `run_hyde_search.run_hyde_pipeline(...)`가 문자열 응답을 반환하는지 검증
-- `pytest.ini`
-  - `integration` 마커 정의, `pythonpath=.`
-  - 경고 필터(예: `threadpoolctl` 런타임 경고, `urllib3` 보안 경고 무시)
+# --- Environment-Specific Hosts (팀 공유) ---
+ES_HOST="https://your-es-instance.com"
+OLLAMA_HOST="https://your-ollama-instance.com"
 
----
+# --- User-Specific File Paths (개인 경로) ---
+# (경로에 한글/공백이 없도록 주의)
+JSON_SAVE_PATH="/Users/your_name/projects/rag-project/data/notion_content.json"
+TXT_SAVE_PATH="/Users/your_name/projects/rag-project/data/notion_content.txt"
 
-### 실행 순서(예시)
-1) 환경 준비
-- `.env`에 필수 키/경로 설정: `NOTION_TOKEN`, `ES_HOST`, `ES_ID`, `ES_API_KEY`, `OLLAMA_HOST`, `TXT_SAVE_PATH`, `JSON_SAVE_PATH` 등
-- ES 9.x 인스턴스와 Ollama 서버 가동
+# --- Test-Specific (팀 공유) ---
+# 통합 테스트(pytest -m integration)에 사용할 Notion 페이지 ID
+TEST_NOTION_PAGE_ID="YOUR_TEST_NOTION_PAGE_ID"
+```
 
-2) 데이터 색인(오프라인)
-- `python -m main_workflow`에서 `run_notion_to_file()` 실행 후 `run_process_and_index()`로 ES에 색인
-  - 또는 스크립트 내부에서 순차 호출 로직을 구성
+> **보안 ⚠️:** `.env` 파일은 `.gitignore`에 반드시 포함되어야 하며, **절대 Git에 커밋하면 안 됩니다.**
 
-3) 검색/응답(온라인)
-- `python -m run_hyde_search` 스타일로 진입하거나, 코드에서 `run_hyde_search.run_hyde_pipeline(question, es_client, tokenizer, model)` 호출
+#### 1.3. 가상 환경 및 라이브러리 설치
 
-4) 테스트
-- 단위: `pytest tests/test_search_pipeline.py -q`
-- 통합: `pytest -m integration -q` (실제 Notion/ES/Ollama 필요, 색인 데이터 선행 필요)
+Python 3.11+ 환경을 권장합니다.
 
----
+```bash
+# 1. 가상 환경 생성 및 활성화
+python3.11 -m venv .venv
+source .venv/bin/activate
 
-### 유의사항(잠재 이슈)
-- 함수 시그니처 불일치 가능성
-  - `elasticsearch_manager.create_es_index(es_client, index_name, vec_dims)` 등은 인자 필요하지만, `main_workflow.py`는 현재 인자 없이 호출하는 부분이 있어 보입니다. 실제 실행 전 해당 호출부를 최신 시그니처에 맞게 수정이 필요합니다.
-- Ollama 프롬프트 컨텍스트
-  - `run_hyde_search.py`에서 `contexts_docs`(`Document` 리스트)를 문자열로 바로 포맷팅합니다. 모델에 전달될 최종 문자열 형식(예: join/요약)이 필요할 수 있습니다.
-- 환경 변수 강제 검증
-  - `config`가 import 시점에 부족한 값이 있으면 즉시 예외를 던집니다. 로컬에서 빠르게 일부 기능만 테스트하려면 mock/우회가 필요할 수 있습니다.
+# 2. 요구사항 설치
+pip install -r requirements.txt
+```
 
----
+#### 1.4. (중요) AI 모델 캐시(Cache) 생성
 
-### 한눈에 보는 데이터 흐름
-- 색인 파이프라인: Notion → `notion_loader` → 텍스트(TXT) → `text_processor`(키워드/청킹) → `embed_text` → `index_documents` → ES
-- 검색 파이프라인: 질문 → HyDE(Ollama) → `embed_text` → ES k‑NN → 컨텍스트 → Ollama 최종 답변
+`pytest` 또는 `api` 실행 시 C++/Java 라이브러리 충돌을 방지하기 위해, **최초 1회** 모델을 미리 로드하는 스크립트를 실행해야 합니다.
 
-필요하시면 실제 실행 명령, .env 샘플, 또는 시그니처 정합성 수정 포인트를 함께 정리해 드리겠습니다.
+```bash
+# 📣 [Intel Mac 사용자 경고]
+# C++ OpenMP 라이브러리 충돌(Fatal Python error: Aborted)을 방지하려면
+# 아래와 같이 KMP_DUPLICATE_LIB_OK=TRUE 환경 변수를 반드시 붙여야 합니다.
+# (M2/M3 Mac 사용자는 이 변수 없이 실행해도 됩니다.)
+#
+KMP_DUPLICATE_LIB_OK=TRUE python -m scripts.download_models
+```
+
+*(이 스크립트는 모델을 "다운로드"하는 것이 아니라, 이미 `pip install`로 설치된 모델을 메모리에 "미리 로드"하여 초기화 충돌을 방지하는 워밍업 작업입니다.)*
+
+-----
+
+### \#\# 🏃‍♂️ 2. 프로젝트 실행
+
+이 프로젝트는 2개의 메인 애플리케이션(`jobs`, `api`)으로 구성됩니다.
+
+#### 2.1. (Offline) ETL 파이프라인 실행
+
+Notion에서 데이터를 가져와 Elasticsearch에 색인합니다. (데이터가 변경될 때마다 실행 필요)
+
+```bash
+# (venv)
+# 📣 (Intel Mac) KMP_DUPLICATE_LIB_OK=TRUE 를 붙여 실행하세요.
+KMP_DUPLICATE_LIB_OK=TRUE python -m jobs.batch.run_notion_etl
+```
+
+실행하면 터미널에 Notion 페이지 ID를 입력하라는 메시지가 나타납니다.
+
+#### 2.2. (Online) RAG API 서버 실행
+
+사용자 질문에 답변하는 FastAPI 서버를 실행합니다.
+
+```bash
+# (venv)
+# 📣 (Intel Mac) KMP_DUPLICATE_LIB_OK=TRUE 를 붙여 실행하세요.
+KMP_DUPLICATE_LIB_OK=TRUE uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+서버가 `http://localhost:8000`에서 실행됩니다.
+
+#### 2.3. API 테스트
+
+서버가 실행된 상태에서, **새 터미널**을 열어 `curl`로 `POST` 요청을 보내 테스트합니다.
+
+```bash
+curl -X POST "http://localhost:8000/query" \
+     -H "Content-Type: application/json" \
+     -d '{"question": "AI의 가치 정렬 문제는 무엇인가요?"}'
+```
+
+**성공 응답 예시:**
+
+```json
+{
+  "answer": "AI의 가치 정렬 문제는 AI가 인간의 의도나 가치와 어긋나는..."
+}
+```
+
+-----
+
+### \#\# 🏛️ 3. 아키텍처: "Separated Layout"
+
+이 프로젝트는 Python 표준 "Separated Layout" 구조를 따릅니다. 이는 \*\*"재사용 가능한 라이브러리"\*\*와 \*\*"실행 가능한 애플리케이션"\*\*을 명확히 분리하여 유지보수와 확장성을 극대화합니다.
+
+```
+rag-project/
+├── .env                  # 1. (비밀) 비밀 키, 개인 경로
+├── config/               # 2. (설정) 공개 설정값, .env 로더
+│
+├── src/                  # 3. (라이브러리) 핵심 로직 (재사용 가능)
+│   ├── clients/          #    - 외부 API 연동 (Notion, Ollama)
+│   ├── common/           #    - 공통 유틸 (텍스트 처리)
+│   ├── storage/          #    - 데이터 저장/검색 (Elasticsearch)
+│   └── services/         #    - 비즈니스 로직 (RagAgent)
+│
+├── api/                  # 4. (애플리케이션 1) FastAPI 서버
+│   └── main.py
+│
+├── jobs/                 # 5. (애플리케이션 2) ETL 배치 작업
+│   └── batch/
+│       └── run_notion_etl.py
+│
+├── scripts/              # 6. (도구) 모델 워밍업 등 헬퍼 스크립트
+│   └── download_models.py
+│
+└── tests/                # 7. (테스트) 단위/통합 테스트
+```
+
+-----
+
+### \#\# 🧩 4. 핵심 구성 요소 (src)
+
+`src/` 라이브러리 패키지는 4개의 주요 클래스로 구성됩니다.
+
+1.  **`src/clients/notion_client.py (NotionClient)`**
+
+      * (구 `notion_loader.py`)
+      * Notion API에 연결하여 페이지 블록을 재귀적으로 수집하고 `extract_text_content`로 텍스트를 추출합니다.
+
+2.  **`src/clients/ollama_client.py (OllamaClient)`**
+
+      * Ollama 서버와 통신하는 전용 래퍼 클래스입니다.
+      * `get_response` 메서드를 통해 프롬프트를 전송하고 응답을 받습니다.
+
+3.  **`src/common/text_processor.py (TextProcessor)`**
+
+      * (구 `text_processor.py`)
+      * `_get_okt` (Konlpy)로 명사를 추출합니다.
+      * `_get_kw_model` (KeyBERT)로 키워드를 추출합니다.
+      * `chunk_text` 메서드로 "\#\#\# 제목 \#\#\#" 기반 1차 분리 및 `RecursiveCharacterTextSplitter` 2차 청킹을 수행하고, `Document` 객체 리스트를 반환합니다.
+
+4.  **`src/storage/elastic_store.py (ElasticStore)`**
+
+      * (구 `elasticsearch_manager.py` + `search_pipeline.py`)
+      * Elasticsearch 클라이언트와 임베딩 모델(Transformers)을 `__init__`에서 초기화합니다.
+      * `index_documents`: `_embed_text` (mean pooling)를 호출하여 문서를 ES에 색인합니다.
+      * `search_knn`: `knn` 쿼리를 실행하여 `Document` 리스트를 반환합니다.
+
+5.  **`src/services/rag_agent.py (RagAgent)`**
+
+      * (구 `run_hyde_search.py`)
+      * RAG의 전체 비즈니스 로직을 담당합니다.
+      * `query(question)` 메서드는 다음을 순차적으로 실행합니다:
+        1.  `OllamaClient` 호출 (HyDE 가상 답변 생성)
+        2.  `ElasticStore.search_knn` 호출 (HyDE 답변으로 컨텍스트 검색)
+        3.  `OllamaClient` 재호출 (컨텍스트 + 질문으로 RAG 최종 답변 생성)
+
+-----
+
+### \#\# 🧪 5. 테스트
+
+`pytest`를 사용하여 단위(Unit) 및 통합(Integration) 테스트를 수행합니다.
+
+  * `pytest.ini`에 `pythonpath = .`가 설정되어 있어, `src` 패키지 등을 올바르게 임포트할 수 있습니다.
+  * 모든 테스트는 `tests/` 폴더에 위치하며, 실제 API를 호출하는 테스트는 `pytest.mark.integration` 마커가 붙어 있습니다.
+
+**1. 모든 단위 테스트 실행 (빠름, Mock 사용):**
+
+```bash
+# (venv)
+# 📣 (Intel Mac) C++ 충돌 방지 플래그 포함
+KMP_DUPLICATE_LIB_OK=TRUE TQDM_DISABLE=1 pytest -v
+```
+
+**2. 통합 테스트만 실행 (느림, 실제 API 호출):**
+(Notion, Elasticsearch, Ollama 서버가 모두 실행 중이어야 합니다.)
+
+```bash
+# (venv)
+KMP_DUPLICATE_LIB_OK=TRUE TQDM_DISABLE=1 pytest -m integration -v
+```
