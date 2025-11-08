@@ -2,8 +2,7 @@
 
 import pytest
 from langchain.schema import Document
-import text_processor
-from konlpy.tag import Okt  # Okt를 임포트하여 테스트에서 사용
+from src.common.text_processor import TextProcessor
 
 
 @pytest.fixture
@@ -20,61 +19,54 @@ def sample_text():
     """
 
 
-def test_extract_nouns(mocker):
-    """extract_nouns가 konlpy.Okt.nouns를 호출하는지 테스트 (모킹)"""
+@pytest.fixture
+def mock_models(mocker):
+    """TextProcessor의 모델 로딩 메서드(_get_okt, _get_kw_model)를 모방합니다."""
 
-    # 1. 가짜(Mock) Okt 객체 생성
-    mock_okt = mocker.MagicMock(spec=Okt)
-    mock_okt.nouns.return_value = ["쿠팡", "전자상거래"]
+    # 1. _get_okt 모방
+    mock_okt = mocker.MagicMock()
+    mock_okt.nouns.return_value = ["쿠팡", "상거래", "소설", "상상력"]
+    mocker.patch(
+        "src.common.text_processor.TextProcessor._get_okt",
+        return_value=mock_okt
+    )
 
-    # 2. _get_okt 함수가 가짜 객체를 반환하도록 설정
-    mocker.patch("text_processor._get_okt", return_value=mock_okt)
-
-    # 3. 함수 실행
-    nouns = text_processor.extract_nouns("쿠팡과 전자상거래")
-
-    # 4. 검증
-    assert nouns == ["쿠팡", "전자상거래"]
-    mock_okt.nouns.assert_called_with("쿠팡과 전자상거래")
-
-
-def test_split_text_with_headers(sample_text, mocker):
-    """헤더 기준으로 텍스트가 잘 분리되고 키워드가 추출되는지 테스트합니다."""
-
-    # KeyBERT와 Okt 모두 모킹하여 C++ 및 Java 로드를 피합니다.
-    mock_okt = mocker.MagicMock(spec=Okt)
-    mock_okt.nouns.return_value = ["쿠팡", "상거래", "산업"]
-    mocker.patch("text_processor._get_okt", return_value=mock_okt)
-
+    # 2. _get_kw_model 모방
     mock_kw_model = mocker.MagicMock()
-    mock_kw_model.extract_keywords.return_value = [("쿠팡", 0.9), ("상거래", 0.8)]
-    mocker.patch("text_processor._get_kw_model", return_value=mock_kw_model)
+    mock_kw_model.extract_keywords.return_value = [("키워드1", 0.9), ("키워드2", 0.8)]
+    mocker.patch(
+        "src.common.text_processor.TextProcessor._get_kw_model",
+        return_value=mock_kw_model
+    )
 
-    header_chunks = text_processor.split_text_with_headers(sample_text, top_n=2)
-
-    assert len(header_chunks) == 2
-    assert header_chunks[0]["title"] == "첫 번째 문서: 넥스트 커머스"
-    assert "쿠팡|상거래" in header_chunks[0]["keywords"]
+    return mock_okt, mock_kw_model
 
 
-def test_chunk_text_with_recursive_splitter(sample_text, mocker):
-    """재귀적 청커가 잘 작동하는지 테스트합니다."""
+def test_chunk_text_with_headers_and_keywords(sample_text, mock_models):
+    """
+    TextProcessor.chunk_text가 헤더 분리 및 키워드 추출을 잘 수행하는지 테스트
+    """
+    mock_okt, mock_kw_model = mock_models
 
-    # 이 테스트는 모델 로드가 필요 없으므로 모킹 없이 실행
-    # (내부적으로 split_text_with_headers를 호출하므로, 위 테스트의 모킹이 필요할 수 있음)
-    # ➡️ 위 테스트와 분리하기 위해 여기서도 모킹을 추가합니다.
+    # 1. Act
+    # sbert_model_name은 중요하지 않음 (어차피 _get_kw_model이 모방됨)
+    processor = TextProcessor(sbert_model_name="fake-model")
+    final_chunks = processor.chunk_text(sample_text, chunk_size=150, chunk_overlap=20)
 
-    mock_okt = mocker.MagicMock(spec=Okt)
-    mock_okt.nouns.return_value = ["쿠팡"]
-    mocker.patch("text_processor._get_okt", return_value=mock_okt)
+    # 2. Assert
+    # 100자보다 본문이 길기 때문에 2개 헤더가 총 4개의 청크로 나뉘어야 함
+    assert len(final_chunks) == 4
 
-    mock_kw_model = mocker.MagicMock()
-    mock_kw_model.extract_keywords.return_value = [("쿠팡", 0.9)]
-    mocker.patch("text_processor._get_kw_model", return_value=mock_kw_model)
-
-    final_chunks = text_processor.chunk_text_with_recursive_splitter(sample_text, chunk_size=100, chunk_overlap=20)
-
-    assert len(final_chunks) == 2
+    # 첫 번째 청크가 올바른 메타데이터를 가졌는지 확인
     assert isinstance(final_chunks[0], Document)
     assert final_chunks[0].metadata["title"] == "첫 번째 문서: 넥스트 커머스"
-    assert "쿠팡이" in final_chunks[0].page_content
+    assert final_chunks[0].metadata["keywords"] == "키워드1|키워드2"
+    assert "쿠팡이 잘 나가고" in final_chunks[0].page_content
+
+    # 네 번째 청크가 올바른 메타데이터를 가졌는지 확인
+    assert final_chunks[3].metadata["title"] == "두 번째 문서: 공산주의자가 온다"
+    assert "글 쓴지는 꽤 오래됩니다" in final_chunks[3].page_content
+
+    # 내부 함수들이 호출되었는지 확인
+    assert mock_okt.nouns.call_count == 2
+    assert mock_kw_model.extract_keywords.call_count == 2
