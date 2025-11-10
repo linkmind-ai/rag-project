@@ -1,7 +1,9 @@
 # src/clients/notion_client.py
 
 import requests
+import logging
 
+logger = logging.getLogger(__name__)
 
 class NotionClient:
     """Notion API와 통신하여 데이터를 추출하는 클래스"""
@@ -40,7 +42,7 @@ class NotionClient:
             return all_blocks
 
         except requests.exceptions.RequestException as e:
-            print(f"블록 가져오기 오류 (ID: {block_id}): {e}")
+            logger.error(f"블록 가져오기 오류 (ID: {block_id}): {e}", exc_info=True)
             return []
 
     def extract_text_content(self, blocks: list) -> str:

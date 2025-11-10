@@ -1,12 +1,14 @@
 # src/common/text_processor.py
 
 import re
+import logging
 from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from keybert import KeyBERT
 from konlpy.tag import Okt
 from sentence_transformers import SentenceTransformer
 
+logger = logging.getLogger(__name__)
 
 class TextProcessor:
     """텍스트를 청크로 분할하고 키워드를 추출하는 클래스"""
@@ -19,13 +21,13 @@ class TextProcessor:
 
     def _get_okt(self):
         if self.okt is None:
-            print("[Lazy Load] Initializing Konlpy Okt model...")
+            logger.info("[Lazy Load] Initializing Konlpy Okt model...")
             self.okt = Okt()
         return self.okt
 
     def _get_kw_model(self):
         if self.kw_model is None:
-            print(f"[Lazy Load] Initializing KeyBERT model: {self.sbert_model_name}...")
+            logger.info(f"[Lazy Load] Initializing KeyBERT model: {self.sbert_model_name}...")
             self.sbert = SentenceTransformer(self.sbert_model_name)
             self.kw_model = KeyBERT(model=self.sbert)
         return self.kw_model
@@ -55,7 +57,7 @@ class TextProcessor:
                         )
                         keywords = '|'.join([k for k, _ in keywords_tuple])
                     except Exception as e:
-                        print(f"KeyBERT 추출 오류: {e}")
+                        logger.warning(f"KeyBERT 추출 오류: {e}", exc_info=True)
                         keywords = ""
 
             result.append({"title": title, "content": content, "keywords": keywords})

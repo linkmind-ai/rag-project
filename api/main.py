@@ -1,5 +1,14 @@
 # api/main.py
 
+import logging
+from src.common.logs.logger_config import setup_logging
+
+# -------------------------------------------------
+# [수정] FastAPI 앱 생성(lifespan) 전에 로깅을 설정합니다.
+setup_logging()
+logger = logging.getLogger(__name__) # api.main 용 로거
+# -------------------------------------------------
+
 from fastapi import FastAPI, HTTPException, Depends
 from pydantic import BaseModel
 import uvicorn
@@ -15,7 +24,7 @@ from src.clients.ollama_client import OllamaClient
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 앱 시작 시 모든 의존성(클래스) 로드
-    print("--- 1. Loading ElasticStore (ES Client + Embedding Models)...")
+    logger.info("--- 1. Loading ElasticStore (ES Client + Embedding Models)...")
     store = ElasticStore(
         host=config.ES_HOST,
         api_id=config.ES_ID,
@@ -24,20 +33,20 @@ async def lifespan(app: FastAPI):
         embedding_model_name=config.ES_EMBEDDING_MODEL  # config에서 모델 이름 주입
     )
 
-    print("--- 2. Loading OllamaClient...")
+    logger.info("--- 2. Loading OllamaClient...")
     ollama = OllamaClient(
         host=config.OLLAMA_HOST,
         model=config.OLLAMA_MODEL
     )
 
-    print("--- 3. Loading RagAgent...")
+    logger.info("--- 3. Loading RagAgent...")
     # 의존성 주입 (DI)
     agent = RagAgent(vector_store=store, llm_client=ollama)
 
     app.state.agent = agent
-    print("--- 4. RAG API ready. ---")
+    logger.info("--- 4. RAG API ready. ---")
     yield
-    print("--- RAG API shutting down. ---")
+    logger.info("--- RAG API shutting down. ---")
 
 
 app = FastAPI(lifespan=lifespan)
@@ -65,12 +74,12 @@ async def handle_query(request: QueryRequest, agent: RagAgent = Depends(get_agen
         return {"answer": answer}
 
     except Exception as e:
-        print(f"Error during query: {e}")
+        logger.error(f"Error during query: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error.")
 
 
 if __name__ == "__main__":
     # 이 파일을 직접 실행하지 않고, 터미널에서 'uvicorn'으로 실행합니다.
     # 예: uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
-    print("FastAPI 서버를 실행하려면 터미널에서 uvicorn 명령어를 사용하세요:")
-    print("uvicorn api.main:app --reload --host 0.0.0.0 --port 8000")
+    logger.info("FastAPI 서버를 실행하려면 터미널에서 uvicorn 명령어를 사용하세요:")
+    logger.info("uvicorn api.main:app --reload --host 0.0.0.0 --port 8000")

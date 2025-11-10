@@ -1,7 +1,9 @@
 # src/clients/ollama_client.py
 
 import ollama
+import logging
 
+logger = logging.getLogger(__name__)
 
 class OllamaClient:
     """Ollama API와 통신하는 래퍼 클래스"""
@@ -11,9 +13,9 @@ class OllamaClient:
         try:
             self.client = ollama.Client(host=host)
             self.client.list()
-            print(f"✅ Ollama 클라이언트 연결 성공 (Host: {host})")
+            logger.info(f"✅ Ollama 클라이언트 연결 성공 (Host: {host})")
         except Exception as e:
-            print(f"❌ Ollama 클라이언트 연결 실패 (Host: {host}): {e}")
+            logger.error(f"❌ Ollama 클라이언트 연결 실패 (Host: {host})", exc_info=True)
             raise
 
     def get_response(self, prompt: str) -> str | None:
@@ -25,5 +27,5 @@ class OllamaClient:
             )
             return response['message']['content']
         except Exception as e:
-            print(f"❌ Ollama API 호출 오류: {e}")
+            logger.error(f"❌ Ollama API 호출 오류: {e}", exc_info=True)
             return None

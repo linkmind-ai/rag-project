@@ -1,5 +1,6 @@
 # src/storage/elastic_store.py
 
+import logging
 from elasticsearch import Elasticsearch
 from transformers import AutoTokenizer, AutoModel
 import torch
@@ -7,6 +8,7 @@ from langchain.schema import Document
 # [수정] config 임포트 방식 변경
 from config import ES_EMBEDDING_MODEL  # config는 top-level 패키지
 
+logger = logging.getLogger(__name__)
 
 class ElasticStore:
     """Elasticsearch 연결, 임베딩, 인덱싱, 검색을 모두 처리하는 클래스"""
@@ -23,17 +25,17 @@ class ElasticStore:
             )
             if not self.client.ping():
                 raise ValueError("Elasticsearch 서버에 연결할 수 없습니다.")
-            print(f"✅ Elasticsearch 연결 성공 (Host: {host})")
+            logger.info(f"✅ Elasticsearch 연결 성공 (Host: {host})")
         except Exception as e:
-            print(f"❌ Elasticsearch 연결 오류: {e}")
+            logger.error(f"❌ Elasticsearch 연결 오류: {e}", exc_info=True)
             raise
 
         try:
             self.tokenizer = AutoTokenizer.from_pretrained(embedding_model_name)
             self.model = AutoModel.from_pretrained(embedding_model_name)
-            print(f"✅ 임베딩 모델 로드 성공: {embedding_model_name}")
+            logger.info(f"✅ 임베딩 모델 로드 성공: {embedding_model_name}")
         except Exception as e:
-            print(f"❌ 임베딩 모델 로드 오류: {e}")
+            logger.error(f"❌ 임베딩 모델 로드 오류: {e}", exc_info=True)
             raise
 
     def _embed_text(self, text: str) -> list[float]:
@@ -63,11 +65,11 @@ class ElasticStore:
                         }
                     }
                 )
-                print(f"✅ 인덱스 '{self.index_name}' 생성 완료.")
+                logger.info(f"✅ 인덱스 '{self.index_name}' 생성 완료.")
             except Exception as e:
-                print(f"❌ 인덱스 생성 오류: {e}")
+                logger.error(f"❌ 인덱스 생성 오류: {e}", exc_info=True)
         else:
-            print(f"ℹ️ 인덱스 '{self.index_name}'가 이미 존재합니다.")
+            logger.info(f"ℹ️ 인덱스 '{self.index_name}'가 이미 존재합니다.")
 
     def index_documents(self, documents: list[Document]):
         """문서 목록을 임베딩하여 Elasticsearch에 저장합니다."""
@@ -81,10 +83,10 @@ class ElasticStore:
                 }
                 self.client.index(index=self.index_name, id=f"chunk-{i}", document=body)
             except Exception as e:
-                print(f"❌ 문서 {i} 인덱싱 오류: {e}")
+                logger.error(f"❌ 문서 {i} 인덱싱 오류: {e}", exc_info=True)
 
         self.client.indices.refresh(index=self.index_name)
-        print(f"✅ 총 {len(documents)}개의 문서가 Elasticsearch에 저장되었습니다.")
+        logger.info(f"✅ 총 {len(documents)}개의 문서가 Elasticsearch에 저장되었습니다.")
 
     def search_knn(self, query_text: str, k=3) -> list[Document]:
         """텍스트 쿼리를 벡터로 변환하여 k-NN 검색을 실행합니다."""
@@ -111,5 +113,5 @@ class ElasticStore:
                 contexts_docs.append(doc)
             return contexts_docs
         except Exception as e:
-            print(f"❌ Elasticsearch k-NN 검색 오류: {e}")
+            logger.error(f"❌ Elasticsearch k-NN 검색 오류: {e}", exc_info=True)
             return []
