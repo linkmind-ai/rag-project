@@ -1,45 +1,9 @@
 import os
 import json
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 import requests
-from dotenv import load_dotenv
-
-
-# =========================
-# 환경 설정 클래스
-# =========================
-
-@dataclass
-class NotionConfig:
-    token: str
-    version: str
-    contents_path: str
-    txt_path: str
-    json_path: str
-
-    @classmethod
-    def from_env(cls) -> "NotionConfig":
-        """환경 변수에서 설정을 로드."""
-        load_dotenv()
-
-        token = os.getenv("NOTION_TOKEN")
-        if not token:
-            raise ValueError("❌ 환경변수 NOTION_TOKEN이 설정되어 있지 않습니다. .env 파일을 확인하세요.")
-
-        version = os.getenv("NOTION_VERSION", "2022-06-28")
-        contents_path = os.getenv("NOTION_CONTENTS_PATH", ".")
-        txt_path = os.getenv("NOTION_TXT_PATH", "notion_page_content.txt")
-        json_path = os.getenv("NOTION_JSON_PATH", "notion_page_content.json")
-
-        return cls(
-            token=token,
-            version=version,
-            contents_path=contents_path,
-            txt_path=txt_path,
-            json_path=json_path,
-        )
+from config import NotionConfig
 
 
 # =========================

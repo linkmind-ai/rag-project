@@ -1,67 +1,10 @@
 import os
 import json
-from dotenv import load_dotenv
-from dataclasses import dataclass
 
 from elastic_search import ElasticSearchIndexer
 from FlagEmbedding import FlagReranker
 from chunker import *
-
-
-# =========================
-# 설정 / 환경 로딩
-# =========================
-
-@dataclass
-class VectorDBConfig:
-    es_host: str
-    es_id: str
-    es_api_key: str
-    es_index: str
-    contents_path: str
-    txt_path: str
-    json_path: str
-    vec_dims: int
-    keyword_model_name: str
-    embedding_model_name: str
-    reranker_model_name: str
-
-    @classmethod
-    def from_env_and_file(cls, config_path: str = "refactoring/config.json") -> "VectorDBConfig":
-        load_dotenv()
-
-        es_host = os.getenv("ES_HOST")
-        es_id = os.getenv("ES_ID")
-        es_api_key = os.getenv("ES_API_KEY")
-        es_index = os.getenv("ES_INDEX_NAME", "vector-test-index")
-        contents_path = os.getenv("NOTION_CONTENTS_PATH", ".")
-        txt_path = os.getenv("NOTION_TXT_PATH", "notion_page_content.txt")
-        json_path = os.getenv("NOTION_JSON_PATH", "notion_page_content.json")
-        vec_dims = int(os.getenv("VEC_DIMS", "768"))
-
-        if not es_host or not es_id or not es_api_key:
-            raise ValueError("❌ ES_HOST, ES_ID, ES_API_KEY 환경변수를 확인하세요.")
-
-        with open(config_path, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-
-        keyword_model_name = cfg["model"]["keyword"]
-        embedding_model_name = cfg["model"]["embedding"]
-        reranker_model_name = cfg["model"]["reranker"]
-
-        return cls(
-            es_host=es_host,
-            es_id=es_id,
-            es_api_key=es_api_key,
-            es_index=es_index,
-            contents_path=contents_path,
-            txt_path=txt_path,
-            json_path=json_path,
-            vec_dims=vec_dims,
-            keyword_model_name=keyword_model_name,
-            embedding_model_name=embedding_model_name,
-            reranker_model_name=reranker_model_name
-        )
+from config import VectorDBConfig
 
 
 # =========================

@@ -1,19 +1,10 @@
-import json
 from sentence_transformers import SentenceTransformer
 import numpy as np
-
-from contents_to_vectordb import VectorDBConfig
 
 from sentence_transformers import SentenceTransformer
 from FlagEmbedding import FlagReranker
 from elasticsearch import Elasticsearch
 import numpy as np
-
-with open("refactoring/config.json", "r") as f:
-    cfg = json.load(f)
-
-config = VectorDBConfig.from_env_and_file("refactoring/config.json")
-query = "AI의 가치 정렬(value alignment) 문제는 구체적으로 어떤 우려를 말하나요?"
 
 
 class HybridSearcher:
@@ -102,16 +93,3 @@ class HybridSearcher:
         ]
 
         return reranked[:k]
-
-searcher = HybridSearcher(
-    es_host=config.es_host,
-    es_id=config.es_id,
-    es_api_key=config.es_api_key,
-    index_name=config.es_index,
-    embedding_model_name=config.embedding_model_name,
-    reranker_model_name=config.reranker_model_name)
-
-results = searcher.search(query, k=3)
-
-for r in results:
-    print(r + '\n' + '-'*20)
