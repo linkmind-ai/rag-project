@@ -4,7 +4,7 @@ from langchain.prompts import PromptTemplate
 import ollama
 
 from retrieval import hybrid_search
-from prompts.rag_prompts import *
+from rag_prompts import *
 
 with open("template/common/config.json", "r") as f:
     cfg = json.load(f)

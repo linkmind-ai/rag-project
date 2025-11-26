@@ -51,3 +51,11 @@ class ElasticSearchIndexer:
             self.es.index(index=index_name, id=f"chunk-{i}", document=body)
 
         print("✅ 문서와 임베딩이 Elasticsearch에 저장되었습니다.")
+        
+    def delete_all_documents(self):
+        print(f"⚠️ 인덱스 '{self.config.es_index}' 내 모든 문서를 삭제합니다...")
+        response = self.es.delete_by_query(
+            index=self.config.es_index,
+            body={"query": {"match_all": {}}},
+        )
+        print("🗑 삭제 완료:", response)

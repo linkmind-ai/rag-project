@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from dataclasses import dataclass
 
 from elastic_search import ElasticSearchIndexer
+from FlagEmbedding import FlagReranker
 from chunker import *
 
 
@@ -23,9 +24,10 @@ class VectorDBConfig:
     vec_dims: int
     keyword_model_name: str
     embedding_model_name: str
+    reranker_model_name: str
 
     @classmethod
-    def from_env_and_file(cls, config_path: str = "template/common/config.json") -> "VectorDBConfig":
+    def from_env_and_file(cls, config_path: str = "refactoring/config.json") -> "VectorDBConfig":
         load_dotenv()
 
         es_host = os.getenv("ES_HOST")
@@ -45,6 +47,7 @@ class VectorDBConfig:
 
         keyword_model_name = cfg["model"]["keyword"]
         embedding_model_name = cfg["model"]["embedding"]
+        reranker_model_name = cfg["model"]["reranker"]
 
         return cls(
             es_host=es_host,
@@ -57,6 +60,7 @@ class VectorDBConfig:
             vec_dims=vec_dims,
             keyword_model_name=keyword_model_name,
             embedding_model_name=embedding_model_name,
+            reranker_model_name=reranker_model_name
         )
 
 
@@ -71,6 +75,7 @@ class ESPipeline:
         self.noun_extractor = KiwiNounExtractor(config.keyword_model_name)
         self.chunker = Chunker()
         self.embedder = EmbeddingModel(config.embedding_model_name)
+        self.reranker = FlagReranker(config.reranker_model_name)
         self.indexer = ElasticSearchIndexer(config)
 
     def run(self, chunk_size: int = 800, chunk_overlap: int = 50) -> None:
@@ -101,6 +106,12 @@ class ESPipeline:
 # =========================
 
 if __name__ == "__main__":
-    config = VectorDBConfig.from_env_and_file("template/common/config.json")
+    config = VectorDBConfig.from_env_and_file("refactoring/config.json")
     pipeline = ESPipeline(config)
+    
+    # 🔥 여기에 delete 선택 로직을 둘 수 있음
+    user_input = input("ES 인덱스를 모두 삭제할까요? (y/N): ").lower()
+    if user_input == "y":
+        pipeline.indexer.delete_all_documents()
+        
     pipeline.run(chunk_size=800, chunk_overlap=50)
