@@ -49,7 +49,7 @@ class ESPipeline:
 # =========================
 
 if __name__ == "__main__":
-    config = VectorDBConfig.from_env_and_file("refactoring/config.json")
+    config = VectorDBConfig.from_env_and_file()
     pipeline = ESPipeline(config)
     
     # 🔥 여기에 delete 선택 로직을 둘 수 있음

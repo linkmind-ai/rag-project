@@ -48,7 +48,7 @@ class HybridSearcher:
                     "query": {
                         "multi_match": {
                             "query": query,
-                            "fields": ["content"]
+                            "fields": ["content", "metadata.title", "metadata.keywords"]
                         }
                     },
                     "script": {

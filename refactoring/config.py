@@ -60,8 +60,8 @@ class VectorDBConfig:
         es_api_key = os.getenv("ES_API_KEY")
         es_index = os.getenv("ES_INDEX_NAME", "vector-test-index")
         contents_path = os.getenv("NOTION_CONTENTS_PATH", ".")
-        txt_path = os.getenv("NOTION_TXT_PATH", "notion_page_content.txt")
-        json_path = os.getenv("NOTION_JSON_PATH", "notion_page_content.json")
+        txt_path = os.getenv("NOTION_TXT_PATH", "refactoring/documents/notion_page_content.txt")
+        json_path = os.getenv("NOTION_JSON_PATH", "refactoring/documents/notion_page_content.json")
         vec_dims = int(os.getenv("VEC_DIMS", "768"))
         ollama_host = os.getenv("OLLAMA_HOST")
 
