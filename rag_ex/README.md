@@ -6,15 +6,15 @@ LangChain, LangGraph, Elasticsearch를 활용한 고성능 멀티턴 RAG(Retriev
 
 ## 주요 기능
 
-✅ **타입 안정성**: Pydantic을 활용한 완벽한 타입 힌팅 및 런타임 검증  
-✅ **비동기 처리**: async/await를 활용한 고성능 비동기 처리  
-✅ **Elasticsearch 통합**: 벡터 검색, 키워드 검색, 하이브리드 검색 지원  
-✅ **Notion 통합**: Notion 페이지를 API로 가져와서 자동 인덱싱  
-✅ **멀티턴 대화**: 인메모리 저장소를 활용한 세션 기반 대화 이력 관리  
-✅ **Ollama 통합**: Exaone 모델을 활용한 로컬 LLM  
-✅ **파일 업로드**: TXT, PDF, DOCX, MD 파일 자동 처리 및 인덱싱  
-✅ **동시성 제어**: Semaphore를 활용한 요청 동시성 제어  
-✅ **설정 관리**: 환경 변수 기반 설정 분리  
+ **타입 안정성**: Pydantic을 활용한 완벽한 타입 힌팅 및 런타임 검증  
+ **비동기 처리**: async/await를 활용한 고성능 비동기 처리  
+ **Elasticsearch 통합**: 벡터 검색, 키워드 검색, 하이브리드 검색 지원  
+ **Notion 통합**: Notion 페이지를 API로 가져와서 자동 인덱싱  
+ **멀티턴 대화**: 인메모리 저장소를 활용한 세션 기반 대화 이력 관리  
+ **Ollama 통합**: Exaone 모델을 활용한 로컬 LLM  
+ **파일 업로드**: TXT, PDF, DOCX, MD 파일 자동 처리 및 인덱싱  
+ **동시성 제어**: Semaphore를 활용한 요청 동시성 제어  
+ **설정 관리**: 환경 변수 기반 설정 분리  
 
 ## 아키텍처
 
@@ -447,7 +447,6 @@ MAX_CONCURRENT_REQUESTS=5
 - **메타데이터**: 페이지 제목, URL, 생성/수정 시간 자동 저장
 
 ## 기술 스택
-
 - **FastAPI**: 비동기 웹 프레임워크
 - **LangChain**: LLM 애플리케이션 프레임워크
 - **LangGraph**: 상태 기반 워크플로우 엔진
@@ -457,23 +456,7 @@ MAX_CONCURRENT_REQUESTS=5
 - **Pydantic**: 데이터 검증 및 타입 힌팅
 - **aiohttp**: 비동기 HTTP 클라이언트
 
-## Elasticsearch vs ChromaDB
-
-### Elasticsearch 장점
-✅ 프로덕션 레벨 확장성  
-✅ 다양한 검색 방식 (벡터, 키워드, 하이브리드)  
-✅ 강력한 필터링 및 집계 기능  
-✅ 분산 아키텍처 지원  
-✅ 실시간 인덱싱  
-✅ 풍부한 모니터링 및 관리 도구  
-
-### ChromaDB 장점
-✅ 간단한 설치 및 설정  
-✅ 가벼운 임베딩 전용 DB  
-✅ 로컬 개발에 적합  
-
 ## 주의사항
-
 1. **Elasticsearch 실행**: API 실행 전 Elasticsearch 서비스가 실행 중이어야 합니다
 2. **Ollama 실행**: Ollama 서비스가 실행 중이어야 합니다
 3. **모델 다운로드**: Exaone 및 nomic-embed-text 모델이 다운로드되어 있어야 합니다
