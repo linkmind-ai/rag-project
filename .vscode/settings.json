@@ -1,0 +1,37 @@
+{
+  // 1. 기본 에디터 설정 (들여쓰기 및 공백 규칙)
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+  "editor.formatOnSave": true,
+
+  // 2. Python 환경 및 가상환경(venv) 자동 인식
+  // 프로젝트 루트의 .venv를 우선 탐색 (Windows의 Scripts/python.exe 및 Linux의 bin/python 자동 대응)
+  "python.defaultInterpreterPath": ".venv",
+  "python.terminal.activateEnvInSelectedTerminal": true,
+
+  // 3. 운영 체제 통합 터미널 설정 (Windows에서 Git Bash 사용)
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "terminal.integrated.env.windows": {
+    "PYTHONPATH": "${workspaceFolder}"
+  },
+
+  // 4. 언어별 포맷터 및 코드 액션 설정
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.black-formatter",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "always"
+    }
+  },
+
+  // 5. 도구 실행 전략 (OS별 경로 차이 극복)
+  // 가상환경(.venv) 내부에 설치된 black과 isort를 최우선으로 사용
+  "python.formatting.provider": "none",
+  "black-formatter.importStrategy": "fromEnvironment",
+  "isort.importStrategy": "fromEnvironment",
+
+  // 6. 분석 도구 패키지 참조 경로 (Windows/Linux 통합)
+  "python.analysis.extraPaths": [
+    "${workspaceFolder}/.venv/lib/site-packages",
+    "${workspaceFolder}/.venv/Lib/site-packages"
+  ]
+}
