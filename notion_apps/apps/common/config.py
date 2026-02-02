@@ -1,0 +1,50 @@
+from pydantic import Field
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """설정값 관리"""
+    
+    # OLLAMA 설정
+    OLLAMA_BASE_URL: str = Field(default="https://ollama.nabee.ai.kr/")
+    OLLAMA_MODEL: str = Field(default="EfCAHLahUiiJuB4jvu3_tA")
+
+    # 엘라스틱서치 설정
+    ELASTICSEARCH_URL: str = Field(default="https://es.nabee.ai.kr/")
+    ELASTICSEARCH_INDEX: str = Field(default="vector-test-index")
+    ELASTICSEARCH_USER: str = Field(default="TfsG65sBiLW-D9U8Xu4q")
+    ELASTICSEARCH_PASSWORD: str = Field(default="HRo4sn6jiCEt6qSE3uY5xg")
+    EMBEDDING_MODEL: str = Field(default="bge-m3:latest")
+    EMBEDDING_DIM: int = Field(default=384)
+
+    #단일성 정체감의 장애 현상은 어떻게 나타나는가?
+    # 벡터스토어 설정
+    # EMBEDDING_MODEL: str = Field(default="")
+    # PERSIST_DIR: str = Field(default="")
+    # COLLECTION_NAME: str = Field(default="notion_documents")
+
+    # API 설정
+    API_HOST: str = Field(default="0.0.0.0")
+    API_PORT: int = Field(default="8000")
+    MAX_CONCURRENT_REQUESTS: int = Field(default=5)
+
+    # RAG 설정
+    CHUNK_SIZE: int = Field(default=1000)
+    CHUNK_OVERLAP: int = Field(default=200)
+    TOP_K_RESULTS: int = Field(default=3)
+    MAX_HISTORY_LENGTH: int = Field(default=10)
+
+    # 문서 업로드 설정
+    UPLOAD_DIR: str = Field(default="./uploads")
+    MAX_FILE_SIZE: int = Field(default=10*1024*1024)
+    ALLOWED_EXTENSIONS: list = Field(default=["txt", "pdf", "docx", "md"])
+
+    # Notion 연동 설정
+    NOTION_TOKEN: str = Field(default="ntn_S49134845636QN7OizYlyythCTORUXOCvYcp2U19S0P6dy")
+    NOTION_VERSION: str = Field(default="2022-06-28")
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = True
+
+settings = Settings()
