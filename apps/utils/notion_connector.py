@@ -1,3 +1,41 @@
+"""
+Notion API 연동 모듈.
+
+이 모듈은 Notion 워크스페이스의 페이지와 데이터베이스를 RAG 시스템에
+마이그레이션하기 위한 비동기 클라이언트를 제공합니다.
+
+┌──────────────────────────────────────────────────────────────────────┐
+│                    Notion API 데이터 구조 개요                        │
+├──────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  Notion 워크스페이스                                                  │
+│  └── 페이지 (Page)                                                   │
+│       ├── 속성 (Properties): 제목, 생성일, 수정일 등 메타데이터       │
+│       └── 블록 (Blocks): 실제 콘텐츠를 담는 계층 구조                 │
+│            ├── paragraph: 일반 텍스트                                │
+│            ├── heading_1/2/3: 제목                                   │
+│            ├── bulleted_list_item: 불릿 목록                         │
+│            ├── numbered_list_item: 번호 목록                         │
+│            ├── to_do: 체크박스 항목                                  │
+│            ├── code: 코드 블록                                       │
+│            ├── quote: 인용문                                         │
+│            ├── callout: 강조 박스                                    │
+│            ├── divider: 구분선                                       │
+│            └── child_page: 하위 페이지 (재귀 탐색 필요)              │
+│                                                                      │
+│  각 블록은 has_children 플래그로 하위 블록 존재 여부 표시             │
+│  → True인 경우 별도 API 호출로 children 조회 필요                     │
+│                                                                      │
+│  텍스트는 rich_text 배열로 제공 (서식 정보 포함)                      │
+│  → plain_text 필드에서 순수 텍스트만 추출                             │
+└──────────────────────────────────────────────────────────────────────┘
+
+핵심 기능:
+- 페이지 콘텐츠 조회 및 재귀적 블록 탐색
+- 블록 타입별 마크다운 변환
+- Document 객체로 변환하여 벡터 스토어에 저장 가능
+"""
+
 from __future__ import annotations
 
 import logging
@@ -12,12 +50,23 @@ logger = logging.getLogger(__name__)
 
 
 class NotionConnector:
-    """비동기 Notion API 연동 클라이언트.
+    """
+    비동기 Notion API 연동 클라이언트.
 
-    - 세션/헤더 속성명을 _session/_headers로 단일화합니다.
-    - 모든 I/O 요청에 timeout을 명시합니다.
-    - print 대신 구조화 로그(extra)를 사용합니다.
-    - 세션은 지연 생성(lazy)하며, close()로 종료 가능합니다.
+    이 클래스는 Notion API와 통신하여 페이지 콘텐츠를 가져오고,
+    RAG 시스템에서 사용할 수 있는 Document 형식으로 변환합니다.
+
+    설계 원칙:
+    - 세션/헤더 속성명을 _session/_headers로 단일화
+    - 모든 I/O 요청에 timeout 명시 (기본 15초)
+    - print 대신 구조화 로그(extra) 사용 (JSON 로깅 호환)
+    - 세션은 지연 생성(lazy)하며 close()로 명시적 종료
+
+    Attributes:
+        BASE_URL: Notion API 기본 URL
+        _session: aiohttp 클라이언트 세션 (지연 생성)
+        _timeout: API 요청 타임아웃 설정
+        _headers: 인증 토큰과 API 버전을 포함한 요청 헤더
     """
 
     BASE_URL = "https://api.notion.com/v1"
@@ -56,11 +105,57 @@ class NotionConnector:
             await self._session.close()
 
     async def _get_json(self, url: str) -> Optional[Dict[str, Any]]:
-        """GET 요청 후 JSON 응답을 반환합니다."""
+        """
+        GET 요청 후 JSON 응답을 반환합니다.
+
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │                     에러 핸들링 전략 상세                             │
+        ├──────────────────────────────────────────────────────────────────────┤
+        │                                                                      │
+        │  Notion API 에러 유형 및 대응:                                        │
+        │                                                                      │
+        │  [HTTP 상태 코드 기반 에러]                                           │
+        │  ┌─────────┬──────────────────────────────────────────────────────┐  │
+        │  │ 400     │ 잘못된 요청 (파라미터 오류)                          │  │
+        │  │ 401     │ 인증 실패 (토큰 만료/무효)                           │  │
+        │  │ 403     │ 권한 없음 (페이지 접근 권한 부족)                    │  │
+        │  │ 404     │ 리소스 없음 (삭제된 페이지/잘못된 ID)                │  │
+        │  │ 429     │ 요청 한도 초과 (Rate Limit)                          │  │
+        │  │ 500     │ Notion 서버 오류                                     │  │
+        │  └─────────┴──────────────────────────────────────────────────────┘  │
+        │                                                                      │
+        │  → 모든 비-2xx 응답: 로그 기록 후 None 반환 (호출자가 처리)          │
+        │  → 에러 텍스트는 1000자로 제한 (로그 크기 관리)                      │
+        │                                                                      │
+        │  [네트워크/클라이언트 에러]                                           │
+        │  ┌─────────────────────────────────────────────────────────────────┐ │
+        │  │ ClientConnectionError: 연결 실패 (DNS, 네트워크 단절)          │ │
+        │  │ ClientResponseError: 응답 처리 실패                            │ │
+        │  │ ClientPayloadError: 응답 본문 파싱 실패                        │ │
+        │  │ TimeoutError: 요청 타임아웃 (기본 15초)                        │ │
+        │  └─────────────────────────────────────────────────────────────────┘ │
+        │                                                                      │
+        │  → aiohttp.ClientError로 일괄 캐치                                   │
+        │  → 스택 트레이스 포함 로그 (logger.exception)                        │
+        │  → None 반환으로 상위 로직이 graceful하게 처리                       │
+        │                                                                      │
+        │  ※ 재시도(retry) 로직은 의도적으로 미포함                            │
+        │    → 호출자가 필요 시 tenacity 등으로 래핑                           │
+        └──────────────────────────────────────────────────────────────────────┘
+
+        Args:
+            url: 요청할 Notion API URL
+
+        Returns:
+            성공 시 JSON 딕셔너리, 실패 시 None
+        """
         session = await self._get_session()
 
         try:
             async with session.get(url, headers=self._headers) as response:
+                # ═══════════════════════════════════════════════════════
+                # HTTP 상태 코드 검증: 2xx가 아니면 실패로 처리
+                # ═══════════════════════════════════════════════════════
                 if response.status < 200 or response.status >= 300:
                     error_text = await response.text()
                     logger.warning(
@@ -68,12 +163,18 @@ class NotionConnector:
                         extra={
                             "url": url,
                             "status": response.status,
-                            "error_text": error_text[:1000],
+                            "error_text": error_text[:1000],  # 로그 크기 제한
                         },
                     )
                     return None
                 return await response.json()
+
         except aiohttp.ClientError as exc:
+            # ═══════════════════════════════════════════════════════════
+            # 네트워크/클라이언트 레벨 에러 처리
+            # - 연결 실패, 타임아웃, 응답 파싱 실패 등
+            # - exception()으로 스택 트레이스 포함 로깅
+            # ═══════════════════════════════════════════════════════════
             logger.exception(
                 "notion_api_client_error",
                 extra={"url": url, "error": str(exc)},
@@ -97,7 +198,41 @@ class NotionConnector:
         return page_data
 
     async def fetch_all_blocks(self, block_id: str) -> List[Dict[str, Any]]:
-        """block_id의 모든 하위 블록을 재귀적으로 가져옵니다."""
+        """
+        블록의 모든 하위 블록을 재귀적으로 가져옵니다.
+
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │                    재귀적 블록 탐색 로직                              │
+        ├──────────────────────────────────────────────────────────────────────┤
+        │                                                                      │
+        │  Notion 블록 구조는 트리 형태:                                        │
+        │                                                                      │
+        │  페이지 (root)                                                       │
+        │  ├── heading_1 (has_children: false)                                │
+        │  ├── paragraph (has_children: false)                                │
+        │  ├── toggle (has_children: true) ← 하위 블록 존재!                  │
+        │  │   ├── paragraph                                                  │
+        │  │   └── bulleted_list_item                                         │
+        │  └── child_page (has_children: true) ← 하위 페이지!                 │
+        │      └── (별도 페이지로 재귀 탐색)                                   │
+        │                                                                      │
+        │  알고리즘:                                                            │
+        │  1. 현재 블록의 children API 호출                                    │
+        │  2. 각 자식 블록을 순회                                              │
+        │  3. has_children=true인 블록 발견 시 재귀 호출                       │
+        │  4. 재귀 결과를 부모 블록의 "children" 키에 저장                     │
+        │                                                                      │
+        │  주의사항:                                                            │
+        │  - 깊은 중첩 구조의 경우 API 호출이 많아질 수 있음                   │
+        │  - Notion API Rate Limit (3 req/sec) 고려 필요                       │
+        └──────────────────────────────────────────────────────────────────────┘
+
+        Args:
+            block_id: 탐색 시작 블록 ID
+
+        Returns:
+            모든 하위 블록 리스트 (중첩 구조 포함)
+        """
         blocks_url = f"{self.BASE_URL}/blocks/{block_id}/children"
         blocks_data = await self._get_json(blocks_url)
         if not blocks_data:
@@ -113,6 +248,12 @@ class NotionConnector:
                 continue
 
             all_blocks.append(block)
+
+            # ═══════════════════════════════════════════════════════════
+            # 재귀 탐색: has_children=true인 블록의 하위 블록 조회
+            # - toggle, column, synced_block 등이 children을 가질 수 있음
+            # - 재귀 결과는 부모 블록의 "children" 키에 저장
+            # ═══════════════════════════════════════════════════════════
             if block.get("has_children") is True and isinstance(block.get("id"), str):
                 children = await self.fetch_all_blocks(block["id"])
                 if children:
@@ -132,12 +273,38 @@ class NotionConnector:
         blocks: Iterable[Dict[str, Any]],
         ordered_index_start: int,
     ) -> None:
+        """
+        Notion 블록을 마크다운 텍스트로 변환하여 parts에 추가.
+
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │                 블록 타입별 마크다운 변환 규칙                         │
+        ├──────────────────────────────────────────────────────────────────────┤
+        │                                                                      │
+        │  Notion 블록 타입     →    마크다운 출력                              │
+        │  ─────────────────────────────────────────────────────────────────── │
+        │  paragraph           →    {텍스트}\n\n                               │
+        │  heading_1           →    # {텍스트}\n\n                             │
+        │  heading_2           →    ## {텍스트}\n\n                            │
+        │  heading_3           →    ### {텍스트}\n\n                           │
+        │  bulleted_list_item  →    • {텍스트}\n                               │
+        │  numbered_list_item  →    1. {텍스트}\n (자동 넘버링)                │
+        │  to_do               →    [x] 또는 [ ] {텍스트}\n                    │
+        │  code                →    ```{언어}\n{코드}\n```\n\n                 │
+        │  quote               →    > {텍스트}\n\n                             │
+        │  callout             →    {이모지} {텍스트}\n\n                      │
+        │  divider             →    \n---\n\n                                  │
+        │  child_page          →    \n\n### {제목} ###\n\n                     │
+        │                                                                      │
+        │  ※ rich_text 배열에서 plain_text만 추출하여 사용                     │
+        │  ※ 하위 블록(children)은 재귀 호출로 처리                            │
+        └──────────────────────────────────────────────────────────────────────┘
+        """
         ordered_index = ordered_index_start
 
         for block in blocks:
             block_type = block.get("type")
 
-            # child_page의 경우, 제목 먼저 삽입
+            # child_page: 하위 페이지 제목을 섹션 헤더로 삽입
             if block_type == "child_page":
                 child_title = block.get("child_page", {}).get("title")
                 if isinstance(child_title, str) and child_title:

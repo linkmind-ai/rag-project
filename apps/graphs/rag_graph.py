@@ -144,18 +144,87 @@ class RAGGraph:
             self._initialized = True
 
     def _build_graph(self) -> None:
-        """그래프 구조 빌드"""
+        """
+        LangGraph 워크플로우 구조 빌드.
+
+        ┌──────────────────────────────────────────────────────────────────────┐
+        │                    LangGraph 상태 전이 과정 상세                       │
+        ├──────────────────────────────────────────────────────────────────────┤
+        │                                                                      │
+        │  [입력]                                                               │
+        │  GraphState {                                                        │
+        │    query: "사용자 질문",                                             │
+        │    session_id: "세션ID",                                             │
+        │    chat_history: [이전 대화],                                        │
+        │    retrieved_docs: [],      ← 비어있음                               │
+        │    answer: "",              ← 비어있음                               │
+        │    evidence_indices: []     ← 비어있음                               │
+        │  }                                                                   │
+        │      │                                                               │
+        │      ▼                                                               │
+        │  ┌─────────────────────────────────────────────────────────────┐     │
+        │  │ [N1] retrieve 노드                                          │     │
+        │  │ ─────────────────────────────────────────────────────────── │     │
+        │  │ 입력: query                                                 │     │
+        │  │ 처리: elasticsearch_store.hybrid_search() 호출              │     │
+        │  │ 출력: {"retrieved_docs": [문서1, 문서2, 문서3]}             │     │
+        │  │       ↓ 상태 병합 (기존 상태 + 출력)                        │     │
+        │  └─────────────────────────────────────────────────────────────┘     │
+        │      │                                                               │
+        │      │ edge: "retrieve" → "generate"                                │
+        │      ▼                                                               │
+        │  ┌─────────────────────────────────────────────────────────────┐     │
+        │  │ [N2] generate 노드                                          │     │
+        │  │ ─────────────────────────────────────────────────────────── │     │
+        │  │ 입력: query, retrieved_docs, chat_history                   │     │
+        │  │ 처리: LLM에 프롬프트 + 컨텍스트 전달                        │     │
+        │  │ 출력: {"answer": "LLM이 생성한 답변"}                        │     │
+        │  │       ↓ 상태 병합                                           │     │
+        │  └─────────────────────────────────────────────────────────────┘     │
+        │      │                                                               │
+        │      │ edge: "generate" → "identify_evidence"                       │
+        │      ▼                                                               │
+        │  ┌─────────────────────────────────────────────────────────────┐     │
+        │  │ [N3] identify_evidence 노드                                 │     │
+        │  │ ─────────────────────────────────────────────────────────── │     │
+        │  │ 입력: query, answer, retrieved_docs                         │     │
+        │  │ 처리: 하이브리드 근거 식별 (LLM + 키워드 매칭)              │     │
+        │  │ 출력: {"evidence_indices": [0, 2]}                          │     │
+        │  │       ↓ 상태 병합                                           │     │
+        │  └─────────────────────────────────────────────────────────────┘     │
+        │      │                                                               │
+        │      │ edge: "identify_evidence" → END                              │
+        │      ▼                                                               │
+        │  [최종 출력]                                                          │
+        │  GraphState {                                                        │
+        │    query: "사용자 질문",                                             │
+        │    session_id: "세션ID",                                             │
+        │    chat_history: [이전 대화],                                        │
+        │    retrieved_docs: [문서1, 문서2, 문서3],  ← N1에서 채워짐           │
+        │    answer: "LLM 답변",                     ← N2에서 채워짐           │
+        │    evidence_indices: [0, 2]               ← N3에서 채워짐           │
+        │  }                                                                   │
+        │                                                                      │
+        │  ※ 상태 병합 규칙: 노드 반환값의 키가 기존 상태를 덮어씀             │
+        │  ※ 반환하지 않은 키는 이전 값 유지                                   │
+        └──────────────────────────────────────────────────────────────────────┘
+        """
         workflow = StateGraph(GraphState)
 
+        # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
         workflow.add_node("retrieve", self._retrieve_node)
         workflow.add_node("generate", self._generate_node)
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
+        # 진입점 설정: 그래프 실행 시 첫 번째로 실행될 노드
         workflow.set_entry_point("retrieve")
+
+        # 엣지 연결: 노드 간 순차 실행 순서 정의
         workflow.add_edge("retrieve", "generate")
         workflow.add_edge("generate", "identify_evidence")
-        workflow.add_edge("identify_evidence", END)
+        workflow.add_edge("identify_evidence", END)  # END는 그래프 종료 마커
 
+        # 컴파일: 정의된 그래프를 실행 가능한 형태로 변환
         self._graph = workflow.compile()
 
     async def _retrieve_node(self, state: GraphState) -> Dict[str, Any]:
