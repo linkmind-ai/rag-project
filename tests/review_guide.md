@@ -8,8 +8,8 @@
 ## 핵심 로직 #1: Double-Checked Locking 패턴
 
 ### 파일 위치
-- `apps/stores/vector_store.py:64-82` (ElasticsearchStore.initialize)
-- `apps/graphs/rag_graph.py` (RAGGraph.initialize)
+- `apps/stores/vector_store.py:97-193` (ElasticsearchStore.initialize)
+- `apps/graphs/rag_graph.py:160-175` (RAGGraph.initialize)
 
 ### 핵심 개념
 멀티코루틴 환경에서 싱글톤 초기화의 안전성과 성능을 동시에 보장하는 패턴입니다.
@@ -39,7 +39,7 @@
 ## 핵심 로직 #2: 하이브리드 검색 스코어 정규화
 
 ### 파일 위치
-- `apps/stores/vector_store.py:252-330` (hybrid_search 메서드)
+- `apps/stores/vector_store.py:376-499` (hybrid_search 메서드)
 
 ### 핵심 개념
 벡터 검색과 BM25 키워드 검색의 스코어 범위가 다르므로 정규화가 필요합니다.
@@ -68,7 +68,7 @@
 ## 핵심 로직 #3: N3 하이브리드 근거 식별
 
 ### 파일 위치
-- `apps/graphs/rag_graph.py:257-338` (_identify_evidence_node 메서드)
+- `apps/graphs/rag_graph.py:402-575` (_identify_evidence_node 메서드)
 
 ### 핵심 개념
 LLM의 추론 능력과 키워드 매칭의 정확성을 결합하여 답변 근거를 식별합니다.
@@ -94,13 +94,52 @@ LLM의 추론 능력과 키워드 매칭의 정확성을 결합하여 답변 근
 - [ ] 키워드 일치도 임계값(10%, 20%, 5%)의 근거는 무엇인가?
 - [ ] Fallback 전략(LLM 실패 시)이 적절한가?
 
+### Adaptive Thresholding 설계 (신규)
+- 위치: `apps/graphs/rag_graph.py:427-461` (docstring 내 설계 문서)
+- 상수 정의: `REINFORCE_THRESHOLD = 0.2`, `HALLUCINATION_THRESHOLD = 0.05`
+
+```
+┌───────────┬────────────────────────────────────────────────────┐
+│ 5% 미만   │ LLM 환각 의심 → 제거                               │
+│ 10% 이상  │ 키워드 후보 진입 → 1단계 필터                       │
+│ 20% 이상  │ 고신뢰 문서 → LLM 결과 보강                        │
+└───────────┴────────────────────────────────────────────────────┘
+```
+
+- [ ] "왜 하필 5%인가요?"에 답변 가능한가? → 동적 적응 설계 문서 참조
+- [ ] 답변 길이/도메인에 따른 동적 조정 가능성이 문서화되어 있는가?
+
+---
+
+## 핵심 로직 #4: 리소스 생명주기 (Telemetry)
+
+### 파일 위치
+- `apps/stores/vector_store.py:55-95` (__aenter__/__aexit__)
+- `apps/graphs/rag_graph.py:120-158` (__aenter__/__aexit__)
+- `apps/utils/notion_connector.py:88-144` (__aenter__/__aexit__)
+
+### 핵심 개념
+컨텍스트 매니저 진입/종료 시점에 디버그 로그를 출력하여 리소스 할당/해제를 추적합니다.
+
+```
+[ElasticsearchStore] __aenter__: 리소스 할당 시작 (id=140234567890)
+[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)
+...
+[ElasticsearchStore] __aexit__: 리소스 해제 완료 (ES 연결 종료)
+```
+
+### 리뷰 포인트
+- [ ] 예외 발생 시에도 __aexit__가 호출되는가?
+- [ ] 메모리 누수 우려가 있는 리소스가 모두 close()에서 정리되는가?
+- [ ] 로그에 객체 id가 포함되어 인스턴스 추적이 가능한가?
+
 ---
 
 ## 추가 확인 사항
 
 ### 버그 수정 확인
 - `_prepare_messages` 메서드의 `return messages` 추가 확인
-  - 위치: `apps/graphs/rag_graph.py:135-152`
+  - 위치: `apps/graphs/rag_graph.py:271-289`
 
 ### 타입 힌트 검증
 - `k: Optional[int] = None` 형식으로 수정되었는지 확인
