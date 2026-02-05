@@ -53,13 +53,46 @@ class ElasticsearchStore:
         self._initialized = False
 
     async def __aenter__(self) -> "ElasticsearchStore":
-        """비동기 컨텍스트 매니저 진입"""
+        """
+        비동기 컨텍스트 매니저 진입 - 리소스 할당.
+
+        ┌──────────────────────────────────────────────────────────────┐
+        │               리소스 생명주기 추적 (Telemetry)               │
+        │ ──────────────────────────────────────────────────────────── │
+        │ 진입 시점: async with ElasticsearchStore() as store:        │
+        │ 할당 리소스:                                                 │
+        │   - Elasticsearch AsyncClient 연결                          │
+        │   - Ollama Embeddings 모델 인스턴스                         │
+        │   - RecursiveCharacterTextSplitter 인스턴스                 │
+        └──────────────────────────────────────────────────────────────┘
+        """
+        print(f"[ElasticsearchStore] __aenter__: 리소스 할당 시작 (id={id(self)})")
         await self.initialize()
+        print(f"[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        """비동기 컨텍스트 매니저 종료 - 리소스 정리"""
+        """
+        비동기 컨텍스트 매니저 종료 - 리소스 해제.
+
+        ┌──────────────────────────────────────────────────────────────┐
+        │               리소스 해제 보장 (메모리 누수 방지)            │
+        │ ──────────────────────────────────────────────────────────── │
+        │ 종료 시점: with 블록 종료 또는 예외 발생 시                  │
+        │ 해제 리소스:                                                 │
+        │   - Elasticsearch 연결 종료 (TCP 소켓 반환)                 │
+        │   - 내부 상태 플래그 리셋                                    │
+        │                                                             │
+        │ 예외 발생 시에도 반드시 실행됨 (finally와 동일)              │
+        └──────────────────────────────────────────────────────────────┘
+        """
+        print(f"[ElasticsearchStore] __aexit__: 리소스 해제 시작 (id={id(self)})")
+        if exc_type:
+            print(
+                f"[ElasticsearchStore] __aexit__: 예외 감지 - {exc_type.__name__}: {exc_val}"
+            )
         await self.close()
+        print(f"[ElasticsearchStore] __aexit__: 리소스 해제 완료 (ES 연결 종료)")
 
     async def initialize(self) -> None:
         """

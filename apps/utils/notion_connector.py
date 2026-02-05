@@ -87,11 +87,63 @@ class NotionConnector:
         }
 
     async def __aenter__(self) -> "NotionConnector":
+        """
+        비동기 컨텍스트 매니저 진입 - HTTP 세션 초기화.
+
+        ┌──────────────────────────────────────────────────────────────┐
+        │               리소스 생명주기 추적 (Telemetry)               │
+        │ ──────────────────────────────────────────────────────────── │
+        │ 진입 시점: async with NotionConnector(...) as connector:    │
+        │ 할당 리소스:                                                 │
+        │   - aiohttp.ClientSession (TCP 연결 풀)                     │
+        │   - 인증 헤더 (Bearer 토큰)                                  │
+        │   - 타임아웃 설정 (기본 15초)                                │
+        │                                                             │
+        │ 참고: 세션은 지연 생성(lazy)되며, 실제 요청 시 연결 수립    │
+        └──────────────────────────────────────────────────────────────┘
+        """
+        logger.debug(
+            "notion_connector_enter",
+            extra={"connector_id": id(self), "timeout": self._timeout.total},
+        )
+        print(f"[NotionConnector] __aenter__: HTTP 세션 초기화 (id={id(self)})")
         await self._get_session()
+        print(
+            f"[NotionConnector] __aenter__: 세션 준비 완료 (타임아웃: {self._timeout.total}초)"
+        )
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
+        """
+        비동기 컨텍스트 매니저 종료 - HTTP 세션 종료.
+
+        ┌──────────────────────────────────────────────────────────────┐
+        │               리소스 해제 보장 (메모리 누수 방지)            │
+        │ ──────────────────────────────────────────────────────────── │
+        │ 종료 시점: with 블록 종료 또는 예외 발생 시                  │
+        │ 해제 리소스:                                                 │
+        │   - aiohttp.ClientSession.close() 호출                      │
+        │   - TCP 연결 풀 반환                                         │
+        │   - 미완료 요청 취소                                         │
+        │                                                             │
+        │ 중요: close() 없이 프로세스 종료 시 "Unclosed session"      │
+        │       경고 발생 및 잠재적 리소스 누수                        │
+        └──────────────────────────────────────────────────────────────┘
+        """
+        logger.debug(
+            "notion_connector_exit",
+            extra={
+                "connector_id": id(self),
+                "exception_type": exc_type.__name__ if exc_type else None,
+            },
+        )
+        print(f"[NotionConnector] __aexit__: 세션 종료 시작 (id={id(self)})")
+        if exc_type:
+            print(
+                f"[NotionConnector] __aexit__: 예외 감지 - {exc_type.__name__}: {exc}"
+            )
         await self.close()
+        print(f"[NotionConnector] __aexit__: 세션 종료 완료 (TCP 연결 반환)")
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """aiohttp 세션을 지연 생성하여 반환합니다."""
