@@ -1,20 +1,42 @@
+"""
+LangGraph 기반 RAG 워크플로우 모듈.
+
+이 모듈은 검색-증강-생성(RAG) 파이프라인의 핵심 오케스트레이션을 담당합니다.
+
+워크플로우 구조 (3-노드 순차 실행):
+┌─────────────┐    ┌─────────────┐    ┌───────────────────┐
+│  retrieve   │ -> │  generate   │ -> │ identify_evidence │
+│ (하이브리드 │    │ (LLM 응답   │    │ (근거 문서 식별)  │
+│  검색)      │    │  생성)      │    │                   │
+└─────────────┘    └─────────────┘    └───────────────────┘
+
+핵심 기능:
+- N1: 하이브리드 검색 (벡터 + BM25)
+- N2: 컨텍스트 기반 응답 생성 (대화 이력 지원)
+- N3: LLM + 키워드 하이브리드 근거 식별
+"""
+
 import asyncio
 import json
 import re
-from collections import Counter
-from typing import Dict, Any, Optional, List, Set, Tuple
-from langgraph.graph import StateGraph, END
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 from langchain_community.llms import Ollama
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.graph import END, StateGraph
 
-from models.state import GraphState, Message, Document
-from stores.vector_store import elasticsearch_store
 from common.config import settings
-from prompts.chat_prompt import _CHAT_PROMPT
+from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
+from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from stores.vector_store import elasticsearch_store
 
-# 한국어 불용어 (stopwords)
+# ========== 한국어 불용어 (Stopwords) ==========
+# 키워드 기반 근거 식별 시 노이즈를 제거하기 위한 불용어 집합.
+# 조사, 접속사, 대명사 등 의미적 가치가 낮은 단어들을 필터링하여
+# 핵심 키워드 매칭의 정확도를 높입니다.
+# ==============================================
 _KOREAN_STOPWORDS: Set[str] = {
     "은",
     "는",
@@ -70,9 +92,23 @@ _KOREAN_STOPWORDS: Set[str] = {
 
 
 class RAGGraph:
-    """랭그래프 기반 RAG 프로세스"""
+    """
+    LangGraph 기반 RAG 워크플로우 관리 클래스.
 
-    def __init__(self):
+    이 클래스는 검색-생성-근거식별의 3단계 파이프라인을 구성하고 실행합니다.
+    StateGraph를 사용하여 각 노드 간 상태 전달과 순차 실행을 보장합니다.
+
+    Attributes:
+        _llm: Ollama LLM 인스턴스 (지연 초기화)
+        _graph: 컴파일된 LangGraph StateGraph
+        _initialized: 초기화 완료 플래그 (Double-Checked Locking용)
+        _lock: 동시성 제어를 위한 비동기 락
+        chat_prompt: 단일 쿼리용 프롬프트 템플릿
+        chat_with_history_prompt: 대화 이력 포함 프롬프트 템플릿
+        get_evidence_prompt: 근거 문서 식별용 프롬프트 템플릿
+    """
+
+    def __init__(self) -> None:
         self._llm: Optional[Ollama] = None
         self._graph = None
         self._initialized = False
@@ -133,7 +169,15 @@ class RAGGraph:
         return {"retrieved_docs": context.documents}
 
     def _prepare_messages(self, chat_history: List[Message]) -> List[Any]:
-        """대화 이력 메시지 변환"""
+        """
+        대화 이력을 LangChain 메시지 형식으로 변환.
+
+        Args:
+            chat_history: Message 객체 리스트 (role, content 포함)
+
+        Returns:
+            LangChain 메시지 객체 리스트 (HumanMessage, AIMessage, SystemMessage)
+        """
         messages = []
         for msg in chat_history:
             if msg.role == "user":
@@ -142,6 +186,7 @@ class RAGGraph:
                 messages.append(AIMessage(content=msg.content))
             else:
                 messages.append(SystemMessage(content=msg.content))
+        return messages  # 버그 수정: return 문 누락되어 있었음
 
     def _build_context(self, retrieved_docs: List[Document]) -> str:
         """검색 문서 텍스트 변환"""
@@ -255,7 +300,36 @@ class RAGGraph:
             return []
 
     async def _identify_evidence_node(self, state: GraphState) -> Dict[str, Any]:
-        """답변 근거 문서 식별 (LLM + 키워드 일치도 하이브리드)"""
+        """
+        답변 근거 문서 식별 노드 (N3 하이브리드 로직).
+
+        이 노드는 LLM 기반 추론과 키워드 매칭을 결합하여
+        답변의 근거가 된 문서를 정확하게 식별합니다.
+
+        ┌─────────────────────────────────────────────────────────┐
+        │                N3 하이브리드 근거 식별 로직              │
+        ├─────────────────────────────────────────────────────────┤
+        │ 1단계: 키워드 기반 후보 추출                             │
+        │   - 답변과 문서 간 키워드 일치도 계산                    │
+        │   - 불용어 제거 후 핵심 키워드만 비교                    │
+        │   - 임계값(10%) 이상인 문서를 후보로 선정                │
+        │                                                         │
+        │ 2단계: LLM 기반 근거 식별                                │
+        │   - 프롬프트로 LLM에게 근거 문서 인덱스 요청             │
+        │   - JSON 파싱으로 인덱스 추출                            │
+        │                                                         │
+        │ 3단계: 하이브리드 결합                                   │
+        │   - LLM 결과를 기본으로 사용                             │
+        │   - 키워드 일치도 20% 이상 문서 보강 (LLM이 놓친 경우)   │
+        │   - 키워드 일치도 5% 미만 문서 제거 (LLM 환각 방지)      │
+        └─────────────────────────────────────────────────────────┘
+
+        Args:
+            state: 현재 그래프 상태 (query, answer, retrieved_docs 포함)
+
+        Returns:
+            Dict with 'evidence_indices': 근거 문서 인덱스 리스트
+        """
         query = state.query
         answer = state.answer
         retrieved_docs = state.retrieved_docs
@@ -263,16 +337,15 @@ class RAGGraph:
         if not retrieved_docs:
             return {"evidence_indices": []}
 
-        # 1. 키워드 기반 후보 추출
+        # ========== 1단계: 키워드 기반 후보 추출 ==========
         keyword_candidates = self._get_keyword_based_evidence(
             answer, retrieved_docs, threshold=0.1
         )
         keyword_indices = {idx for idx, _, _ in keyword_candidates}
 
-        # 디버그 로그
         print(f"[N3] 키워드 기반 후보: {keyword_candidates[:5]}")
 
-        # 2. LLM 기반 근거 식별
+        # ========== 2단계: LLM 기반 근거 식별 ==========
         documents_text = "\n\n".join(
             [
                 f"[인덱스 {i}]\n제목: {doc.metadata.get('title', '제목 없음')}\n내용: {doc.content[:500]}"
@@ -293,14 +366,15 @@ class RAGGraph:
             result = await asyncio.to_thread(chain.invoke, input_data)
             llm_indices = await self._parse_evidence_response(result)
 
-            # 유효 범위 필터링
+            # 유효 범위 필터링 (인덱스 범위 초과 방지)
             llm_indices = [idx for idx in llm_indices if 0 <= idx < len(retrieved_docs)]
             print(f"[N3] LLM 선택 인덱스: {llm_indices}")
 
-            # 3. 하이브리드 결합: LLM 결과 + 키워드 고일치 문서
+            # ========== 3단계: 하이브리드 결합 ==========
             final_indices_set = set(llm_indices)
 
-            # 키워드 일치도가 높은 문서 보강 (상위 후보 중 일치도 20% 이상)
+            # 3-1. 키워드 일치도가 높은 문서 보강 (LLM이 놓친 경우 복구)
+            # 일치도 20% 이상이면 답변에 실제로 사용된 것으로 간주
             for idx, overlap_ratio, matched in keyword_candidates:
                 if overlap_ratio >= 0.2:
                     if idx not in final_indices_set:
@@ -310,10 +384,10 @@ class RAGGraph:
                         )
                     final_indices_set.add(idx)
 
-            # LLM이 선택했으나 키워드 일치도가 매우 낮은 문서 제거
+            # 3-2. LLM이 선택했으나 키워드 일치도가 매우 낮은 문서 제거
+            # LLM 환각으로 잘못 선택된 문서 필터링 (일치도 5% 미만)
             for idx in list(final_indices_set):
                 if idx not in keyword_indices:
-                    # 키워드 일치도 재계산
                     overlap, _ = self._calculate_keyword_overlap(
                         answer, retrieved_docs[idx].content
                     )
@@ -330,7 +404,7 @@ class RAGGraph:
 
         except Exception as e:
             print(f"근거 문서 식별 오류: {e}")
-            # Fallback: 키워드 기반 결과만 사용
+            # Fallback: LLM 실패 시 키워드 기반 결과만 사용
             fallback_indices = [
                 idx for idx, ratio, _ in keyword_candidates if ratio >= 0.15
             ]

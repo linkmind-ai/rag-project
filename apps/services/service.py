@@ -1,5 +1,15 @@
+"""
+RAG 서비스 레이어 모듈.
+
+이 모듈은 API 라우터와 RAG 그래프 사이의 비즈니스 로직을 담당합니다.
+- 세션 기반 대화 이력 관리
+- LangGraph 워크플로우 실행 조율
+- 스트리밍/비스트리밍 응답 처리
+"""
+
 import asyncio
-from typing import Dict, Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Dict
+
 from langchain_core.runnables import RunnableConfig
 
 from graphs.rag_graph import rag_graph
@@ -7,9 +17,20 @@ from stores.memory_store import memory_store
 
 
 class RAGService:
-    """RAG시스템 서비스 레이어"""
+    """
+    RAG 시스템 서비스 레이어.
 
-    def __init__(self):
+    API 엔드포인트와 LangGraph 워크플로우 사이에서 비즈니스 로직을 처리합니다:
+    - 대화 이력 로드/저장
+    - 그래프 상태 준비 및 실행
+    - 응답 포맷팅
+
+    Attributes:
+        _initialized: 초기화 완료 플래그 (Double-Checked Locking용)
+        _lock: 동시성 제어를 위한 비동기 락
+    """
+
+    def __init__(self) -> None:
         self._initialized = False
         self._lock = asyncio.Lock()
 
@@ -28,7 +49,23 @@ class RAGService:
     async def process_query(
         self, session_id: str, query: str, use_history: bool = True
     ) -> Dict[str, Any]:
-        """쿼리-답변 invoke 실행"""
+        """
+        쿼리 처리 및 응답 생성 (동기식 invoke).
+
+        전체 RAG 파이프라인을 실행하고 완성된 응답을 반환합니다.
+
+        Args:
+            session_id: 세션 식별자 (대화 이력 관리용)
+            query: 사용자 질의 문자열
+            use_history: 대화 이력 사용 여부 (기본값 True)
+
+        Returns:
+            Dict containing:
+                - answer: LLM 생성 응답
+                - evidence_indices: 근거 문서 인덱스 리스트
+                - evidence_docs: 근거 문서 객체 리스트
+                - all_docs: 검색된 전체 문서 리스트
+        """
         await self.initialize()
 
         chat_history = []
