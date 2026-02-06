@@ -1,11 +1,11 @@
 import asyncio
-from fastapi import APIRouter, HTTPException, status
 
+from common.config import settings
+from fastapi import APIRouter, HTTPException, status
 from models.request import NotionPageRequest
 from models.response import NotionPageResponse
 from stores.vector_store import elasticsearch_store
 from utils.notion_connector import notion_connector
-from common.config import settings
 
 request_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 
@@ -20,7 +20,7 @@ async def import_notion_page(request: NotionPageRequest):
             if not settings.NOTION_TOKEN:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"노션 API 토큰을 다시 설정하세요.",
+                    detail="노션 API 토큰을 다시 설정하세요.",
                 )
 
             page_id = request.page_id.replace("-", "")
@@ -34,7 +34,7 @@ async def import_notion_page(request: NotionPageRequest):
             if not document:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"노션 페이지를 찾을 수 없습니다. 페이지 ID와 API 정보를 확인해주세요.",
+                    detail="노션 페이지를 찾을 수 없습니다. 페이지 ID와 API 정보를 확인해주세요.",
                 )
 
             document_ids = await elasticsearch_store.add_documents([document])

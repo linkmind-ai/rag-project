@@ -19,13 +19,12 @@ LangGraph 기반 RAG 워크플로우 모듈.
 import asyncio
 import json
 import re
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
+from common.config import settings
 from langchain_community.llms import Ollama
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
-
-from common.config import settings
 from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
@@ -37,7 +36,7 @@ from stores.vector_store import elasticsearch_store
 # 조사, 접속사, 대명사 등 의미적 가치가 낮은 단어들을 필터링하여
 # 핵심 키워드 매칭의 정확도를 높입니다.
 # ==============================================
-_KOREAN_STOPWORDS: Set[str] = {
+_KOREAN_STOPWORDS: set[str] = {
     "은",
     "는",
     "이",
@@ -109,7 +108,7 @@ class RAGGraph:
     """
 
     def __init__(self) -> None:
-        self._llm: Optional[Ollama] = None
+        self._llm: Ollama | None = None
         self._graph = None
         self._initialized = False
         self._lock = asyncio.Lock()
@@ -155,7 +154,7 @@ class RAGGraph:
         if exc_type:
             print(f"[RAGGraph] __aexit__: 예외 감지 - {exc_type.__name__}: {exc_val}")
         await self.close()
-        print(f"[RAGGraph] __aexit__: 리소스 정리 완료")
+        print("[RAGGraph] __aexit__: 리소스 정리 완료")
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -258,7 +257,7 @@ class RAGGraph:
         # 컴파일: 정의된 그래프를 실행 가능한 형태로 변환
         self._graph = workflow.compile()
 
-    async def _retrieve_node(self, state: GraphState) -> Dict[str, Any]:
+    async def _retrieve_node(self, state: GraphState) -> dict[str, Any]:
         """검색 노드"""
         query = state.query
 
@@ -268,7 +267,7 @@ class RAGGraph:
 
         return {"retrieved_docs": context.documents}
 
-    def _prepare_messages(self, chat_history: List[Message]) -> List[Any]:
+    def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
         """
         대화 이력을 LangChain 메시지 형식으로 변환.
 
@@ -288,15 +287,18 @@ class RAGGraph:
                 messages.append(SystemMessage(content=msg.content))
         return messages  # 버그 수정: return 문 누락되어 있었음
 
-    def _build_context(self, retrieved_docs: List[Document]) -> str:
+    def _build_context(self, retrieved_docs: list[Document]) -> str:
         """검색 문서 텍스트 변환"""
         context_text = "\n\n".join(
-            [f"Document {i+1}:\n{doc.content}" for i, doc in enumerate(retrieved_docs)]
+            [
+                f"Document {i + 1}:\n{doc.content}"
+                for i, doc in enumerate(retrieved_docs)
+            ]
         )
 
         return context_text
 
-    async def _generate_node(self, state: GraphState) -> Dict[str, Any]:
+    async def _generate_node(self, state: GraphState) -> dict[str, Any]:
         """응답 생성 노드"""
         query = state.query
         retrieved_docs = state.retrieved_docs
@@ -319,7 +321,7 @@ class RAGGraph:
 
         return {"answer": answer}
 
-    def _extract_keywords(self, text: str, min_length: int = 2) -> Set[str]:
+    def _extract_keywords(self, text: str, min_length: int = 2) -> set[str]:
         """텍스트에서 핵심 키워드 추출 (불용어 제거)"""
         # 한글, 영문, 숫자만 추출
         tokens = re.findall(r"[가-힣a-zA-Z0-9]+", text)
@@ -332,7 +334,7 @@ class RAGGraph:
 
     def _calculate_keyword_overlap(
         self, answer: str, doc_content: str
-    ) -> Tuple[float, Set[str]]:
+    ) -> tuple[float, set[str]]:
         """답변과 문서 간 키워드 일치도 계산"""
         answer_keywords = self._extract_keywords(answer)
         doc_keywords = self._extract_keywords(doc_content)
@@ -348,9 +350,9 @@ class RAGGraph:
     def _get_keyword_based_evidence(
         self,
         answer: str,
-        retrieved_docs: List[Document],
+        retrieved_docs: list[Document],
         threshold: float = 0.1,
-    ) -> List[Tuple[int, float, Set[str]]]:
+    ) -> list[tuple[int, float, set[str]]]:
         """키워드 기반 근거 문서 후보 추출"""
         candidates = []
         for idx, doc in enumerate(retrieved_docs):
@@ -364,7 +366,7 @@ class RAGGraph:
         candidates.sort(key=lambda x: x[1], reverse=True)
         return candidates
 
-    async def _parse_evidence_response(self, response: str) -> List[int]:
+    async def _parse_evidence_response(self, response: str) -> list[int]:
         """LLM 응답 근거 인덱스 파싱"""
         try:
             json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
@@ -399,7 +401,7 @@ class RAGGraph:
 
             return []
 
-    async def _identify_evidence_node(self, state: GraphState) -> Dict[str, Any]:
+    async def _identify_evidence_node(self, state: GraphState) -> dict[str, Any]:
         """
         답변 근거 문서 식별 노드 (N3 하이브리드 로직).
 
@@ -488,7 +490,9 @@ class RAGGraph:
         # ========== 2단계: LLM 기반 근거 식별 ==========
         documents_text = "\n\n".join(
             [
-                f"[인덱스 {i}]\n제목: {doc.metadata.get('title', '제목 없음')}\n내용: {doc.content[:500]}"
+                f"[인덱스 {i}]\n"
+                f"제목: {doc.metadata.get('title', '제목 없음')}\n"
+                f"내용: {doc.content[:500]}"
                 for i, doc in enumerate(retrieved_docs)
             ]
         )
@@ -530,9 +534,10 @@ class RAGGraph:
             for idx, overlap_ratio, matched in keyword_candidates:
                 if overlap_ratio >= REINFORCE_THRESHOLD:
                     if idx not in final_indices_set:
+                        kw_sample = list(matched)[:5]
                         print(
                             f"[N3] 키워드 기반 보강: 문서 {idx} "
-                            f"(일치도: {overlap_ratio:.2%}, 키워드: {list(matched)[:5]})"
+                            f"(일치도: {overlap_ratio:.2%}, 키워드: {kw_sample})"
                         )
                     final_indices_set.add(idx)
 
@@ -557,7 +562,8 @@ class RAGGraph:
                     )
                     if overlap < HALLUCINATION_THRESHOLD:
                         print(
-                            f"[N3] 낮은 일치도로 제거: 문서 {idx} (일치도: {overlap:.2%})"
+                            f"[N3] 낮은 일치도로 제거: 문서 {idx} "
+                            f"(일치도: {overlap:.2%})"
                         )
                         final_indices_set.discard(idx)
 
@@ -579,7 +585,7 @@ class RAGGraph:
         return self._graph
 
     async def prepare_state(
-        self, query: str, session_id: str, chat_history: List[Message]
+        self, query: str, session_id: str, chat_history: list[Message]
     ) -> GraphState:
         return GraphState(query=query, chat_history=chat_history, session_id=session_id)
 

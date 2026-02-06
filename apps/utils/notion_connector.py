@@ -39,10 +39,10 @@ Notion API 연동 모듈.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Iterable, List, Optional
+from collections.abc import Iterable
+from typing import Any
 
 import aiohttp
-
 from common.config import settings
 from models.state import Document
 
@@ -76,17 +76,17 @@ class NotionConnector:
         notion_token: str,
         notion_version: str,
         timeout_seconds: float = 15.0,
-        session: Optional[aiohttp.ClientSession] = None,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
-        self._session: Optional[aiohttp.ClientSession] = session
+        self._session: aiohttp.ClientSession | None = session
         self._timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-        self._headers: Dict[str, str] = {
+        self._headers: dict[str, str] = {
             "Authorization": f"Bearer {notion_token}",
             "Notion-Version": notion_version,
             "Content-Type": "application/json",
         }
 
-    async def __aenter__(self) -> "NotionConnector":
+    async def __aenter__(self) -> NotionConnector:
         """
         비동기 컨텍스트 매니저 진입 - HTTP 세션 초기화.
 
@@ -109,7 +109,8 @@ class NotionConnector:
         print(f"[NotionConnector] __aenter__: HTTP 세션 초기화 (id={id(self)})")
         await self._get_session()
         print(
-            f"[NotionConnector] __aenter__: 세션 준비 완료 (타임아웃: {self._timeout.total}초)"
+            f"[NotionConnector] __aenter__: 세션 준비 완료 "
+            f"(타임아웃: {self._timeout.total}초)"
         )
         return self
 
@@ -143,7 +144,7 @@ class NotionConnector:
                 f"[NotionConnector] __aexit__: 예외 감지 - {exc_type.__name__}: {exc}"
             )
         await self.close()
-        print(f"[NotionConnector] __aexit__: 세션 종료 완료 (TCP 연결 반환)")
+        print("[NotionConnector] __aexit__: 세션 종료 완료 (TCP 연결 반환)")
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """aiohttp 세션을 지연 생성하여 반환합니다."""
@@ -156,7 +157,7 @@ class NotionConnector:
         if self._session is not None and not self._session.closed:
             await self._session.close()
 
-    async def _get_json(self, url: str) -> Optional[Dict[str, Any]]:
+    async def _get_json(self, url: str) -> dict[str, Any] | None:
         """
         GET 요청 후 JSON 응답을 반환합니다.
 
@@ -233,7 +234,7 @@ class NotionConnector:
             )
             return None
 
-    async def get_page_content(self, page_id: str) -> Optional[Dict[str, Any]]:
+    async def get_page_content(self, page_id: str) -> dict[str, Any] | None:
         """페이지 ID 기반으로 페이지 속성과 루트 블록(children)을 가져옵니다."""
         page_url = f"{self.BASE_URL}/pages/{page_id}"
         page_data = await self._get_json(page_url)
@@ -249,7 +250,7 @@ class NotionConnector:
 
         return page_data
 
-    async def fetch_all_blocks(self, block_id: str) -> List[Dict[str, Any]]:
+    async def fetch_all_blocks(self, block_id: str) -> list[dict[str, Any]]:
         """
         블록의 모든 하위 블록을 재귀적으로 가져옵니다.
 
@@ -294,7 +295,7 @@ class NotionConnector:
         if not isinstance(blocks, list):
             return []
 
-        all_blocks: List[Dict[str, Any]] = []
+        all_blocks: list[dict[str, Any]] = []
         for block in blocks:
             if not isinstance(block, dict):
                 continue
@@ -313,16 +314,16 @@ class NotionConnector:
 
         return all_blocks
 
-    def extract_text_content(self, blocks: List[Dict[str, Any]]) -> str:
+    def extract_text_content(self, blocks: list[dict[str, Any]]) -> str:
         """Notion 블록 목록에서 텍스트만 추출합니다."""
-        parts: List[str] = []
+        parts: list[str] = []
         self._append_blocks_text(parts, blocks, ordered_index_start=1)
         return "".join(parts)
 
     def _append_blocks_text(
         self,
-        parts: List[str],
-        blocks: Iterable[Dict[str, Any]],
+        parts: list[str],
+        blocks: Iterable[dict[str, Any]],
         ordered_index_start: int,
     ) -> None:
         """
@@ -446,7 +447,7 @@ class NotionConnector:
             if isinstance(children, list) and children:
                 self._append_blocks_text(parts, children, ordered_index_start=1)
 
-    def _append_rich_text(self, parts: List[str], rich_text: Any) -> None:
+    def _append_rich_text(self, parts: list[str], rich_text: Any) -> None:
         if not isinstance(rich_text, list):
             return
         for item in rich_text:
@@ -455,7 +456,7 @@ class NotionConnector:
                 if isinstance(text, str) and text:
                     parts.append(text)
 
-    def _extract_page_title(self, page_data: Dict[str, Any]) -> str:
+    def _extract_page_title(self, page_data: dict[str, Any]) -> str:
         """페이지 제목 추출"""
         properties = page_data.get("properties", {})
         if not isinstance(properties, dict):
@@ -480,8 +481,8 @@ class NotionConnector:
         self,
         page_id: str,
         recursive: bool = True,
-        additional_metadata: Optional[Dict[str, Any]] = None,
-    ) -> Optional[Document]:
+        additional_metadata: dict[str, Any] | None = None,
+    ) -> Document | None:
         """Notion 페이지를 Document 객체로 변환합니다."""
         page_data = await self.get_page_content(page_id)
         if not page_data:
@@ -494,7 +495,7 @@ class NotionConnector:
             blocks = []
 
         if recursive:
-            all_blocks: List[Dict[str, Any]] = []
+            all_blocks: list[dict[str, Any]] = []
             for block in blocks:
                 if not isinstance(block, dict):
                     continue
@@ -509,7 +510,7 @@ class NotionConnector:
 
         text_content = self.extract_text_content(blocks)
 
-        metadata: Dict[str, Any] = {
+        metadata: dict[str, Any] = {
             "source": "notion",
             "page_id": page_id,
             "page_title": page_title,

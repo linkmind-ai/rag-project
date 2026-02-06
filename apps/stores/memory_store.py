@@ -1,15 +1,14 @@
 import asyncio
-from typing import Dict, Optional
-from models.state import ChatHistory, Message
 
 from common.config import settings
+from models.state import ChatHistory, Message
 
 
 class InMemoryStore:
     """비동기 인메모리 저장소"""
 
     def __init__(self):
-        self._store: Dict[str, ChatHistory] = {}
+        self._store: dict[str, ChatHistory] = {}
         self._lock = asyncio.Lock()
 
     async def get_history(self, session_id: str) -> ChatHistory:
@@ -31,7 +30,7 @@ class InMemoryStore:
                 history.messages = history.messages[-settings.MAX_HISTORY_LENGTH :]
 
     async def get_recent_messages(
-        self, session_id: str, limit: Optional[int] = None
+        self, session_id: str, limit: int | None = None
     ) -> list[Message]:
         """최근 메시지 불러오기"""
         limit = limit or settings.MAX_HISTORY_LENGTH

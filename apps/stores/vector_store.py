@@ -15,14 +15,13 @@ import asyncio
 import hashlib
 import warnings
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import urllib3
+from common.config import settings
 from elasticsearch import AsyncElasticsearch
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-from common.config import settings
 from models.state import Document, RetrievedContext
 
 # Cloudflared 터널 환경에서 SSL 인증서 검증 경고 억제
@@ -46,9 +45,9 @@ class ElasticsearchStore:
     """
 
     def __init__(self) -> None:
-        self._es_client: Optional[AsyncElasticsearch] = None
-        self._embeddings: Optional[OllamaEmbeddings] = None
-        self._text_splitter: Optional[RecursiveCharacterTextSplitter] = None
+        self._es_client: AsyncElasticsearch | None = None
+        self._embeddings: OllamaEmbeddings | None = None
+        self._text_splitter: RecursiveCharacterTextSplitter | None = None
         self._lock = asyncio.Lock()
         self._initialized = False
 
@@ -68,7 +67,7 @@ class ElasticsearchStore:
         """
         print(f"[ElasticsearchStore] __aenter__: 리소스 할당 시작 (id={id(self)})")
         await self.initialize()
-        print(f"[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)")
+        print("[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
@@ -89,10 +88,11 @@ class ElasticsearchStore:
         print(f"[ElasticsearchStore] __aexit__: 리소스 해제 시작 (id={id(self)})")
         if exc_type:
             print(
-                f"[ElasticsearchStore] __aexit__: 예외 감지 - {exc_type.__name__}: {exc_val}"
+                f"[ElasticsearchStore] __aexit__: 예외 감지 - "
+                f"{exc_type.__name__}: {exc_val}"
             )
         await self.close()
-        print(f"[ElasticsearchStore] __aexit__: 리소스 해제 완료 (ES 연결 종료)")
+        print("[ElasticsearchStore] __aexit__: 리소스 해제 완료 (ES 연결 종료)")
 
     async def initialize(self) -> None:
         """
@@ -220,14 +220,14 @@ class ElasticsearchStore:
                 index=settings.ELASTICSEARCH_INDEX, body=index_mapping
             )
 
-    def _generate_doc_id(self, content: str, metadata: Dict[str, Any]) -> str:
+    def _generate_doc_id(self, content: str, metadata: dict[str, Any]) -> str:
         """문서 고유 ID 생성"""
         content_hash = hashlib.md5(content.encode()).hexdigest()
         metadata_str = str(sorted(metadata.items()))
         metadata_hash = hashlib.md5(metadata_str.encode()).hexdigest()
         return f"{content_hash[:8]}_{metadata_hash[:8]}"
 
-    async def add_documents(self, documents: List[Document]) -> List[str]:
+    async def add_documents(self, documents: list[Document]) -> list[str]:
         """문서 추가"""
         await self.initialize()
 
@@ -271,8 +271,8 @@ class ElasticsearchStore:
     async def similarity_search(
         self,
         query: str,
-        k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        k: int | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> RetrievedContext:
         """유사도 검색"""
         await self.initialize()
@@ -324,8 +324,8 @@ class ElasticsearchStore:
     async def keyword_search(
         self,
         query: str,
-        k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        k: int | None = None,
+        filters: dict[str, Any] | None = None,
     ) -> RetrievedContext:
         """키워드 기반 검색"""
         await self.initialize()
@@ -376,8 +376,8 @@ class ElasticsearchStore:
     async def hybrid_search(
         self,
         query: str,
-        k: Optional[int] = None,
-        filters: Optional[Dict[str, Any]] = None,
+        k: int | None = None,
+        filters: dict[str, Any] | None = None,
         vector_weight: float = 0.5,
     ) -> RetrievedContext:
         """
@@ -408,7 +408,7 @@ class ElasticsearchStore:
             self.keyword_search(query, k * 2, filters),
         )
 
-        doc_scores: Dict[str, tuple[Document, float]] = {}
+        doc_scores: dict[str, tuple[Document, float]] = {}
 
         # ┌──────────────────────────────────────────────────────────────────────┐
         # │                하이브리드 스코어 정규화 수식 상세 설명                 │
@@ -458,7 +458,9 @@ class ElasticsearchStore:
         # [1단계] 벡터 검색 결과 정규화 및 가중치 적용
         # ═══════════════════════════════════════════════════════════════
         max_vector_score = max(vector_results.scores) if vector_results.scores else 1.0
-        for doc, score in zip(vector_results.documents, vector_results.scores):
+        for doc, score in zip(
+            vector_results.documents, vector_results.scores, strict=True
+        ):
             # 정규화: 현재 스코어 / 최대 스코어 (0~1 범위로 변환)
             normalized_score = score / max_vector_score
             # 가중치 적용: 정규화 스코어 × 벡터 가중치
@@ -470,7 +472,9 @@ class ElasticsearchStore:
         max_keyword_score = (
             max(keyword_results.scores) if keyword_results.scores else 1.0
         )
-        for doc, score in zip(keyword_results.documents, keyword_results.scores):
+        for doc, score in zip(
+            keyword_results.documents, keyword_results.scores, strict=True
+        ):
             normalized_score = score / max_keyword_score
             if doc.doc_id in doc_scores:
                 # ┌────────────────────────────────────────────────────────┐

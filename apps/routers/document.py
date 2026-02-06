@@ -1,14 +1,12 @@
 import asyncio
-import time
-from typing import List
-from fastapi import APIRouter, HTTPException, status, UploadFile, File, Form
 
+from common.config import settings
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 from models.request import AddDocumentRequest
 from models.response import AddDocumentResponse, FileUploadResponse
 from models.state import Document
 from stores.vector_store import elasticsearch_store
 from utils.file_processor import file_processor
-from common.config import settings
 
 request_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 
@@ -36,7 +34,7 @@ async def add_document(request: AddDocumentRequest):
 
 
 @router.post("/add_batch", response_model=AddDocumentResponse)
-async def add_documents_batch(documents: List[AddDocumentRequest]):
+async def add_documents_batch(documents: list[AddDocumentRequest]):
     """문서 일괄 추가"""
 
     async with request_semaphore:
@@ -95,7 +93,7 @@ async def upload_file(file: UploadFile = File(...), metadata: str = Form(default
 
             return FileUploadResponse(
                 success=True,
-                message=f"파일 업로드 성공",
+                message="파일 업로드 성공",
                 filename=file.filename,
                 document_ids=document_ids,
                 chunks_count=len(document_ids),
@@ -136,7 +134,7 @@ async def delete_documents(doc_id: str):
             else:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"문서를 찾을 수 없습니다.",
+                    detail="문서를 찾을 수 없습니다.",
                 )
         except HTTPException:
             raise

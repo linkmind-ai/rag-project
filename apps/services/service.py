@@ -42,7 +42,8 @@ Note:
 import asyncio
 import logging
 import time
-from typing import Any, AsyncGenerator, Dict
+from collections.abc import AsyncGenerator
+from typing import Any
 
 from graphs.rag_graph import rag_graph
 from langchain_core.runnables import RunnableConfig
@@ -164,7 +165,7 @@ class RAGService:
 
     async def process_query(
         self, session_id: str, query: str, use_history: bool = True
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         쿼리 처리 및 응답 생성 (동기식 invoke).
 
@@ -295,7 +296,7 @@ class RAGService:
 
     async def process_query_stream(
         self, session_id: str, query: str, use_history: bool = True
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """
         쿼리-답변 스트리밍 실행.
 

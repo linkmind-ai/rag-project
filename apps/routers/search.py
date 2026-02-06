@@ -1,12 +1,12 @@
 import asyncio
 import time
-from fastapi import APIRouter, HTTPException, status
 
+from common.config import settings
+from fastapi import APIRouter, HTTPException, status
 from models.request import SearchRequest
 from models.response import SearchResponse
 from models.state import SearchResult
 from stores.vector_store import elasticsearch_store
-from common.config import settings
 
 request_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 

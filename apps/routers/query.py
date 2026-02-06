@@ -1,13 +1,13 @@
 import asyncio
-import time
 import json
+import time
+
+from common.config import settings
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
-
 from models.request import QueryRequest
 from models.response import QueryResponse
 from services.service import rag_service
-from common.config import settings
 
 request_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 

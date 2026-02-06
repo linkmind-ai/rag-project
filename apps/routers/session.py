@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, status
-
 from stores.memory_store import memory_store
 
 router = APIRouter(prefix="/session", tags=["session"])
@@ -55,7 +54,7 @@ async def clear_session(session_id: str):
         else:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"세션을 찾을 수 없습니다.",
+                detail="세션을 찾을 수 없습니다.",
             )
     except HTTPException:
         raise

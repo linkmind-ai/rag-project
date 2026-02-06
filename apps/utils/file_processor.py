@@ -1,10 +1,9 @@
 import asyncio
 from pathlib import Path
-from typing import List, Optional
-import aiofiles
 
-from models.state import Document
+import aiofiles
 from common.config import settings
+from models.state import Document
 
 
 class FileProcessor:
@@ -23,21 +22,19 @@ class FileProcessor:
 
         return str(file_path)
 
-    def validate_files(
-        self, filename: str, file_size: int
-    ) -> tuple[bool, Optional[str]]:
+    def validate_files(self, filename: str, file_size: int) -> tuple[bool, str | None]:
         if file_size > settings.MAX_FILE_SIZE:
-            return False, f"파일 크기가 너무 큽니다."
+            return False, "파일 크기가 너무 큽니다."
 
         ext = filename.split(".")[-1].lower()
         if ext not in settings.ALLOWED_EXTENSIONS:
-            return False, f"지원하지 않는 파일 형식입니다."
+            return False, "지원하지 않는 파일 형식입니다."
 
         return True, None
 
-    async def process_txt_file(self, file_path: str) -> List[Document]:
+    async def process_txt_file(self, file_path: str) -> list[Document]:
         """텍스트 파일 처리 프로세스"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        async with aiofiles.open(file_path, encoding="utf-8") as f:
             content = await f.read()
 
         filename = Path(file_path).name
@@ -52,7 +49,7 @@ class FileProcessor:
             )
         ]
 
-    async def process_pdf_file(self, file_path: str) -> List[Document]:
+    async def process_pdf_file(self, file_path: str) -> list[Document]:
         """PDF 파일 처리 프로세스"""
         try:
             import pypdf
@@ -83,7 +80,7 @@ class FileProcessor:
         except ImportError:
             raise ImportError("pypdf 실행 중 오류 발생")
 
-    async def process_docx_file(self, file_path: str) -> List[Document]:
+    async def process_docx_file(self, file_path: str) -> list[Document]:
         """DOCX 파일 처리 프로세스"""
         try:
             import docx
@@ -113,9 +110,9 @@ class FileProcessor:
         except ImportError:
             raise ImportError("python-docx 실행 오류 발생")
 
-    async def process_md_file(self, file_path: str) -> List[Document]:
+    async def process_md_file(self, file_path: str) -> list[Document]:
         """마크다운 처리 프로세스"""
-        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+        async with aiofiles.open(file_path, encoding="utf-8") as f:
             content = await f.read()
 
         filename = Path(file_path).name
@@ -130,7 +127,7 @@ class FileProcessor:
             )
         ]
 
-    async def process_file(self, file_path: str) -> List[Document]:
+    async def process_file(self, file_path: str) -> list[Document]:
         """파일 확장자별 프로세서 결정"""
         ext = Path(file_path).suffix.lower()[1:]
 

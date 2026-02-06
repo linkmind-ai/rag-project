@@ -1,11 +1,11 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from routers import query, document, search, session, notion, system
+from routers import document, notion, query, search, session, system
+from services.service import rag_service
 from stores.vector_store import elasticsearch_store
 from utils.notion_connector import notion_connector
-from services.service import rag_service
 
 
 @asynccontextmanager

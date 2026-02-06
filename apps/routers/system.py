@@ -1,9 +1,9 @@
 import asyncio
-from fastapi import APIRouter, HTTPException, status
 
+from common.config import settings
+from fastapi import APIRouter, HTTPException, status
 from models.response import HealthResponse
 from stores.vector_store import elasticsearch_store
-from common.config import settings
 
 request_semaphore = asyncio.Semaphore(settings.MAX_CONCURRENT_REQUESTS)
 
