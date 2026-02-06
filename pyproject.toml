@@ -5,14 +5,36 @@ description = "LangGraph based Multi-turn RAG System"
 requires-python = ">=3.11"
 
 [tool.ruff]
+cache-dir = "~/.cache/ruff"
 target-version = "py311"
 line-length = 88
+# 의사 코드(pseudocode) 또는 미완성 파일 제외
+exclude = ["apps/gear/gear_origin.py", "apps/gear/query.py"]
 
 [tool.ruff.lint]
 # E, F: 기본 에러/플래이크, I: isort(임포트 정렬), B: 버그 예방, UP: 최신 문법
-select = ["E", "F", "I", "B", "UP"]
-ignore = ["D100", "D104"] # 필요에 따라 무시할 규칙 추가
+select = [
+    "E", "F", "I", "B", "UP",
+    "N",   # pep8-naming: 변수명 규칙 위반 방지
+    "S",   # flake8-bandit: 보안 취약점 (Hardcoded password 등) 탐지
+    "ANN", # flake8-annotations: 타입 힌트 누락 방지 (30계명 준수)
+    "RUF", # ruff 전용 규칙: 가장 현대적인 파이썬 베스트 프랙티스 적용
+]
+ignore = ["D100", "D104",  "E501", "B008"] # 필요에 따라 무시할 규칙 추가
 
 [tool.ruff.lint.isort]
 # 한글 주석 보존을 위해 설정
 section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.per-file-ignores]
+# 파일별 특수 규칙:
+# __init__.py의 unused import와 테스트 파일의 assert를 허용하여 유연성을 확보합니다.
+"__init__.py" = ["F401"]
+"tests/**/*" = ["S101"]
+# gear_origin.py는 GeAR 논문의 의사 코드(pseudocode) 참고용 파일
+"apps/gear/gear_origin.py" = ["ALL"]
+# config.py의 0.0.0.0 바인딩은 Docker/K8s 환경에서 의도된 설정
+"apps/common/config.py" = ["S104"]
+"apps/gear/config.py" = ["S104"]
+# notion_connector.py의 rich_text 파라미터는 Notion API의 동적 구조로 Any 사용 불가피
+"apps/utils/notion_connector.py" = ["ANN401"]

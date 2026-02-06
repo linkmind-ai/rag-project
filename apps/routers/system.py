@@ -11,14 +11,14 @@ router = APIRouter(tags=["system"])
 
 
 @router.get("/", response_model=HealthResponse)
-async def root():
+async def root() -> HealthResponse:
     """루트 엔드포인트"""
     es_connected = await elasticsearch_store.health_check()
     return HealthResponse(status="running", elasticsearch_connected=es_connected)
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check():
+async def health_check() -> HealthResponse:
     """통신 상태 점검"""
     es_connected = await elasticsearch_store.health_check()
     return HealthResponse(
@@ -28,7 +28,7 @@ async def health_check():
 
 
 @router.delete("/index/clear")
-async def clear_index():
+async def clear_index() -> dict[str, bool | str]:
     """엘라스틱서치 인덱스 초기화"""
     async with request_semaphore:
         try:
@@ -37,5 +37,5 @@ async def clear_index():
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"인덱스 초기화 오류 발생: {str(e)}",
-            )
+                detail=f"인덱스 초기화 오류 발생: {e!s}",
+            ) from e

@@ -19,12 +19,14 @@ LangGraph 기반 RAG 워크플로우 모듈.
 import asyncio
 import json
 import re
+from types import TracebackType
 from typing import Any
 
 from common.config import settings
 from langchain_community.llms import Ollama
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
@@ -135,7 +137,12 @@ class RAGGraph:
         print(f"[RAGGraph] __aenter__: 초기화 완료 (모델: {settings.OLLAMA_MODEL})")
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """
         비동기 컨텍스트 매니저 종료 - 연결 리소스 정리.
 
@@ -530,9 +537,9 @@ class RAGGraph:
             # │ - 짧은 답변: 15%로 낮춤 (키워드 수가 적어 매칭 어려움)       │
             # │ - 긴 답변: 25%로 높임 (키워드 풍부해 엄격 기준 적용)         │
             # └─────────────────────────────────────────────────────────────┘
-            REINFORCE_THRESHOLD = 0.2  # 보강 임계값 (현재 고정, 추후 동적 조정 가능)
+            reinforce_threshold = 0.2  # 보강 임계값 (현재 고정, 추후 동적 조정 가능)
             for idx, overlap_ratio, matched in keyword_candidates:
-                if overlap_ratio >= REINFORCE_THRESHOLD:
+                if overlap_ratio >= reinforce_threshold:
                     if idx not in final_indices_set:
                         kw_sample = list(matched)[:5]
                         print(
@@ -554,13 +561,13 @@ class RAGGraph:
             # │                                                             │
             # │ 주의: 너무 높이면 정당한 근거 문서도 제거될 수 있음          │
             # └─────────────────────────────────────────────────────────────┘
-            HALLUCINATION_THRESHOLD = 0.05  # 환각 제거 임계값
+            hallucination_threshold = 0.05  # 환각 제거 임계값
             for idx in list(final_indices_set):
                 if idx not in keyword_indices:
                     overlap, _ = self._calculate_keyword_overlap(
                         answer, retrieved_docs[idx].content
                     )
-                    if overlap < HALLUCINATION_THRESHOLD:
+                    if overlap < hallucination_threshold:
                         print(
                             f"[N3] 낮은 일치도로 제거: 문서 {idx} "
                             f"(일치도: {overlap:.2%})"
@@ -580,7 +587,7 @@ class RAGGraph:
             ]
             return {"evidence_indices": fallback_indices if fallback_indices else [0]}
 
-    def get_graph(self):
+    def get_graph(self) -> CompiledStateGraph | None:
         """컴파일된 그래프 반환"""
         return self._graph
 

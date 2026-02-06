@@ -1,35 +1,34 @@
 import asyncio
 import json
 import re
-import numpy as np
-from typing import List, Dict, Any, Tuple, Optional
 from collections import defaultdict
-from langgraph.graph import StateGraph, END
-from langchain_community.llms import Ollama
-from langchain_community.embeddings import OllamaEmbeddings
-from konlpy.tag import Mecab
-import kss
+from typing import Any
 
-from models.state import GraphState, Message, Document
-from stores.vector_store import elasticsearch_store
-from gear.gist_store import GistMemory
+import kss
+import numpy as np
 from common.config import settings
-from prompts.chat_prompt import _CHAT_PROMPT
+from gear.gist_store import GistMemory
+from konlpy.tag import Mecab
+from langchain_community.embeddings import OllamaEmbeddings
+from langchain_community.llms import Ollama
+from models.state import Document
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
-from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
-from prompts.extract_triples_prompt import _EXTRACT_TRIPLES_PROMPT
+from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.check_answerability_prompt import _CHECK_ANSWERABILITY_PROMPT
+from prompts.extract_triples_prompt import _EXTRACT_TRIPLES_PROMPT
+from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
 from prompts.rewrite_query_prompt import _REWRITE_QUERY_PROMPT
+from stores.vector_store import elasticsearch_store
 
 
 class GearRetriever:
     """기존 RAG 프로세스에 GeAR 모듈 추가"""
 
-    def __init__(self):
-        self._llm: Optional[Ollama] = None
-        self._embeddings: Optional[OllamaEmbeddings] = None
+    def __init__(self) -> None:
+        self._llm: Ollama | None = None
+        self._embeddings: OllamaEmbeddings | None = None
         self._initialized = False
-        self._initial_triples_cache: List[Dict[str, Any]] = []
+        self._initial_triples_cache: list[dict[str, Any]] = []
         self._lock = asyncio.Lock()
         self.mecab = Mecab()
         self.chat_prompt = _CHAT_PROMPT
@@ -58,8 +57,8 @@ class GearRetriever:
         self._initialized = True
 
     async def _extract_triples_from_docs(
-        self, documents: List[Document]
-    ) -> List[Dict[str, Any]]:
+        self, documents: list[Document]
+    ) -> list[dict[str, Any]]:
         """문서에서 triples 추출"""
         triples = []
 
@@ -115,8 +114,8 @@ class GearRetriever:
             self._initial_triples_cache = []
 
     def rrf_fusion(
-        self, rank_lists: List[List[Document]], k: int = 60
-    ) -> List[Document]:
+        self, rank_lists: list[list[Document]], k: int = 60
+    ) -> list[Document]:
         """RFF 알고리즘(랭크 역수 연산)"""
         scores = defaultdict(float)
         doc_map = {}
@@ -130,7 +129,7 @@ class GearRetriever:
         sorted_ids = sorted(scores.keys(), key=lambda x: scores[x], reverse=True)
         return [doc_map[doc_id] for doc_id in sorted_ids]
 
-    def _parse_triples_response(self, response: str) -> List[Dict[str, Any]]:
+    def _parse_triples_response(self, response: str) -> list[dict[str, Any]]:
         """LLM 프롬프트 결과 triples 파싱"""
         try:
             json_match = re.search(r"\{.*?\}", response, re.DOTALL)
@@ -146,15 +145,18 @@ class GearRetriever:
 
     async def reader(
         self,
-        passages: List[Document],
+        passages: list[Document],
         query: str,
-        existing_triples: Optional[List[Dict[str, Any]]] = None,
-    ) -> List[Dict[str, Any]]:
+        existing_triples: list[dict[str, Any]] | None = None,
+    ) -> list[dict[str, Any]]:
         """문서에서 proximal triples 추출"""
         await self.initialize()
 
         passages_text = "\n\n".join(
-            [f"[문서 {i+1}]\n{doc.content[:500]}" for i, doc in enumerate(passages[:5])]
+            [
+                f"[문서 {i + 1}]\n{doc.content[:500]}"
+                for i, doc in enumerate(passages[:5])
+            ]
         )
 
         existing_info = ""
@@ -187,7 +189,7 @@ class GearRetriever:
             print(f"triples 추출 오류: {e}")
             return []
 
-    def _triple_to_text(self, triple: Dict[str, Any]) -> str:
+    def _triple_to_text(self, triple: dict[str, Any]) -> str:
         """triples 텍스트로 변환"""
         subject = triple.get("subject", "")
         relation = triple.get("relation", "")
@@ -195,7 +197,7 @@ class GearRetriever:
         return f"{subject} {relation} {object}"
 
     def _word_matching_score(
-        self, triple1: Dict[str, Any], triple2: Dict[str, Any]
+        self, triple1: dict[str, Any], triple2: dict[str, Any]
     ) -> float:
         """triple 간 키워드 기반 유사도 점수 매칭"""
 
@@ -231,12 +233,12 @@ class GearRetriever:
 
     async def _self_attention_matching(
         self,
-        proximal_triple: Dict[str, Any],
+        proximal_triple: dict[str, Any],
         proximal_text: str,
-        initial_triples: List[Dict[str, Any]],
+        initial_triples: list[dict[str, Any]],
         threshold: float = 0.5,
         # 테스트로 임계치값 재설정
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """셀프어텐션으로 initial triples 조회"""
         try:
             proximal_emb = await asyncio.to_thread(
@@ -256,7 +258,8 @@ class GearRetriever:
             try:
                 i_emb = await asyncio.to_thread(self._embeddings.embed_query, i_text)
                 i_emb = np.array(i_emb)
-            except:
+            except Exception:  # noqa: S112
+                # 임베딩 실패 시 해당 triple 건너뜀 (네트워크 오류 등)
                 continue
 
             word_score = self._word_matching_score(proximal_triple, i_triple)
@@ -275,8 +278,8 @@ class GearRetriever:
         return best_match
 
     async def triple_link(
-        self, proximal_triples: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+        self, proximal_triples: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         """
         proximal triples(LLM이 판단한 유효 triples)와 initial triples(리트리버 결과 triples) 링크 생성(매핑)
         키워드 매칭과 코사인 유사도 기반의 셀프어텐션 결합
@@ -310,8 +313,8 @@ class GearRetriever:
         return linked_triples
 
     async def graph_expansion(
-        self, triples: List[Dict[str, Any]], max_docs: int = 5
-    ) -> List[Document]:
+        self, triples: list[dict[str, Any]], max_docs: int = 5
+    ) -> list[Document]:
         """그래프 기반 검색 문서 확장"""
 
         if not triples:
@@ -339,7 +342,8 @@ class GearRetriever:
 
         for exp_triple in expanded_triples:
             context = await elasticsearch_store.hybrid_search(
-                query=exp_triple, k=max_docs  # 여기에 사용자 질의도 더해본다면 어떨까?
+                query=exp_triple,
+                k=max_docs,  # 여기에 사용자 질의도 더해본다면 어떨까?
             )
             all_docs.extend(context.documents)
 
@@ -354,8 +358,8 @@ class GearRetriever:
         return unique_docs
 
     async def reason(
-        self, triples: List[Dict[str, Any]], query: str
-    ) -> Tuple[bool, str]:
+        self, triples: list[dict[str, Any]], query: str
+    ) -> tuple[bool, str]:
         """생성된 triples로 답변 가능한지 판단"""
         # triples로 답변 가능한지 보다 expansion 결과 만들어진 서브그래프로 리트리버된 문서 기준으로 확인하는건?
         await self.initialize()
@@ -393,7 +397,7 @@ class GearRetriever:
             return False, str(e)
 
     async def rewrite_query(
-        self, original_query: str, triples: List[Dict[str, Any]], reasoning: str
+        self, original_query: str, triples: list[dict[str, Any]], reasoning: str
     ) -> str:
         """쿼리 재작성"""
         await self.initialize()
@@ -426,7 +430,7 @@ class GearRetriever:
 
     async def gear_retrieve(
         self, query: str, max_steps: int = 3, top_k: int = 10
-    ) -> Tuple[List[Document], GistMemory]:
+    ) -> tuple[list[Document], GistMemory]:
         """GeAR 파이프라인 실행"""
         await self.initialize()
 
@@ -489,7 +493,7 @@ class GearRetriever:
         print(f"\n최종결과: {len(final_passages)}개 문서")
         return final_passages[:top_k], gist_memory
 
-    async def sync_ge_retreive(self, query: str, top_k: int = 5) -> List[Document]:
+    async def sync_ge_retreive(self, query: str, top_k: int = 5) -> list[Document]:
         """SyncGE 검색"""
         await self.initialize()
 

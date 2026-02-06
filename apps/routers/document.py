@@ -14,7 +14,7 @@ router = APIRouter(prefix="/document", tags=["document"])
 
 
 @router.post("/add", response_model=AddDocumentResponse)
-async def add_document(request: AddDocumentRequest):
+async def add_document(request: AddDocumentRequest) -> AddDocumentResponse:
     """문서 추가 엔드포인트"""
     async with request_semaphore:
         try:
@@ -29,12 +29,14 @@ async def add_document(request: AddDocumentRequest):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"문서 추가 오류 발생: {str(e)}",
-            )
+                detail=f"문서 추가 오류 발생: {e!s}",
+            ) from e
 
 
 @router.post("/add_batch", response_model=AddDocumentResponse)
-async def add_documents_batch(documents: list[AddDocumentRequest]):
+async def add_documents_batch(
+    documents: list[AddDocumentRequest],
+) -> AddDocumentResponse:
     """문서 일괄 추가"""
 
     async with request_semaphore:
@@ -55,12 +57,14 @@ async def add_documents_batch(documents: list[AddDocumentRequest]):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"문서 추가 오류 발생: {str(e)}",
-            )
+                detail=f"문서 추가 오류 발생: {e!s}",
+            ) from e
 
 
 @router.post("/upload", response_model=FileUploadResponse)
-async def upload_file(file: UploadFile = File(...), metadata: str = Form(default="{}")):
+async def upload_file(
+    file: UploadFile = File(...), metadata: str = Form(default="{}")
+) -> FileUploadResponse:
     """파일 업로드 엔드포인트"""
 
     async with request_semaphore:
@@ -104,12 +108,12 @@ async def upload_file(file: UploadFile = File(...), metadata: str = Form(default
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"파일 업로드 오류 발생: {str(e)}",
-            )
+                detail=f"파일 업로드 오류 발생: {e!s}",
+            ) from e
 
 
 @router.get("/count")
-async def get_document_count():
+async def get_document_count() -> dict[str, int | str]:
     """문서 수량 카운트"""
     try:
         count = await elasticsearch_store.get_document_count()
@@ -119,12 +123,12 @@ async def get_document_count():
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"문서 수 조회 오류 발생: {str(e)}",
-        )
+            detail=f"문서 수 조회 오류 발생: {e!s}",
+        ) from e
 
 
 @router.delete("/{doc_id}")
-async def delete_documents(doc_id: str):
+async def delete_documents(doc_id: str) -> dict[str, bool | str]:
     """문서 삭제"""
     async with request_semaphore:
         try:
@@ -141,5 +145,5 @@ async def delete_documents(doc_id: str):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"문서 삭제 오류 발생: {str(e)}",
-            )
+                detail=f"문서 삭제 오류 발생: {e!s}",
+            ) from e

@@ -7,7 +7,7 @@ from models.state import ChatHistory, Message
 class InMemoryStore:
     """비동기 인메모리 저장소"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._store: dict[str, ChatHistory] = {}
         self._lock = asyncio.Lock()
 

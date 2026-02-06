@@ -13,7 +13,7 @@ router = APIRouter(prefix="/notion", tags=["notion"])
 
 
 @router.post("/import", response_model=NotionPageResponse)
-async def import_notion_page(request: NotionPageRequest):
+async def import_notion_page(request: NotionPageRequest) -> NotionPageResponse:
     """노션 페이지 가져오기 엔드포인트"""
     async with request_semaphore:
         try:
@@ -54,5 +54,5 @@ async def import_notion_page(request: NotionPageRequest):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"노션 페이지 가져오기 오류 발생: {str(e)}",
-            )
+                detail=f"노션 페이지 가져오기 오류 발생: {e!s}",
+            ) from e

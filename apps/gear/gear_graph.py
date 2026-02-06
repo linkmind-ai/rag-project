@@ -1,26 +1,27 @@
 import asyncio
 import json
 import re
-from typing import Dict, Any, Optional, List
-from langgraph.graph import StateGraph, END
-from langchain_community.llms import Ollama
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
+from typing import Any
 
-from models.state import GraphState, Message, Document
-from stores.vector_store import elasticsearch_store
-from gear import gear_retriever
 from common.config import settings
-from prompts.chat_prompt import _CHAT_PROMPT
+from gear import gear_retriever
+from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain_community.llms import Ollama
+from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
+from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
+from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from stores.vector_store import elasticsearch_store
 
 
 class RAGGraph:
     """랭그래프 기반 RAG 프로세스"""
 
-    def __init__(self):
-        self._llm: Optional[Ollama] = None
-        self._graph = None
+    def __init__(self) -> None:
+        self._llm: Ollama | None = None
+        self._graph: CompiledStateGraph | None = None
         self._initialized = False
         self._lock = asyncio.Lock()
         self.chat_prompt = _CHAT_PROMPT
@@ -59,13 +60,13 @@ class RAGGraph:
 
         self._graph = workflow.compile()
 
-    async def _retrieve_node(self, state: GraphState) -> Dict[str, Any]:
+    async def _retrieve_node(self, state: GraphState) -> dict[str, Any]:
         """검색 노드"""
         query = state.query
         use_gear = getattr(settings, "USE_GEAR_RETRIEVAL", False)
 
         if use_gear:
-            documents, gist_memory = await gear_retriever.gear_retrieve(
+            documents, _gist_memory = await gear_retriever.gear_retrieve(
                 query=query,
                 max_steps=getattr(settings, "GEAR_MAX_STEPS", 3),
                 top_k=settings.TOP_K_RESULTS,
@@ -78,7 +79,7 @@ class RAGGraph:
             )
             return {"retrieved_docs": context.documents}
 
-    def _prepare_messages(self, chat_history: List[Message]) -> List[Any]:
+    def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
         """대화 이력 메시지 변환"""
         messages = []
         for msg in chat_history:
@@ -89,15 +90,18 @@ class RAGGraph:
             else:
                 messages.append(SystemMessage(content=msg.content))
 
-    def _build_context(self, retrieved_docs: List[Document]) -> str:
+    def _build_context(self, retrieved_docs: list[Document]) -> str:
         """검색 문서 텍스트 변환"""
         context_text = "\n\n".join(
-            [f"Document {i+1}:\n{doc.content}" for i, doc in enumerate(retrieved_docs)]
+            [
+                f"Document {i + 1}:\n{doc.content}"
+                for i, doc in enumerate(retrieved_docs)
+            ]
         )
 
         return context_text
 
-    async def _generate_node(self, state: GraphState) -> Dict[str, Any]:
+    async def _generate_node(self, state: GraphState) -> dict[str, Any]:
         """응답 생성 노드"""
         query = state.query
         retrieved_docs = state.retrieved_docs
@@ -120,7 +124,7 @@ class RAGGraph:
 
         return {"answer": answer}
 
-    async def _parse_evidence_response(self, response: str) -> List[int]:
+    async def _parse_evidence_response(self, response: str) -> list[int]:
         """LLM 응답 근거 인덱스 파싱"""
         try:
             json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
@@ -155,7 +159,7 @@ class RAGGraph:
 
             return []
 
-    async def _identify_evidence_node(self, state: GraphState) -> Dict[str, Any]:
+    async def _identify_evidence_node(self, state: GraphState) -> dict[str, Any]:
         """답변 근거 문서 식별"""
         query = state.query
         answer = state.answer
@@ -187,12 +191,12 @@ class RAGGraph:
             print(f"근거 문서 식별 오류: {e}")
             return {"evidence_indices": list(range(len(retrieved_docs)))}
 
-    def get_graph(self):
+    def get_graph(self) -> CompiledStateGraph | None:
         """컴파일된 그래프 반환"""
         return self._graph
 
     async def prepare_state(
-        self, query: str, session_id: str, chat_history: List[Message]
+        self, query: str, session_id: str, chat_history: list[Message]
     ) -> GraphState:
         return GraphState(query=query, chat_history=chat_history, session_id=session_id)
 

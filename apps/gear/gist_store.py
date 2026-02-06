@@ -1,16 +1,16 @@
-from typing import List, Dict, Any
+from typing import Any
 
 
 class GistMemory:
     """proximal triples 저장"""
 
-    def __init__(self):
-        self.proximal_triples: List[Dict[str, Any]] = []
+    def __init__(self) -> None:
+        self.proximal_triples: list[dict[str, Any]] = []
 
-    def add_triples(self, new_triples: List[Dict[str, Any]]) -> None:
+    def add_triples(self, new_triples: list[dict[str, Any]]) -> None:
         self.proximal_triples.extend(new_triples)
 
-    def get_all_triples(self) -> List[Dict[str, Any]]:
+    def get_all_triples(self) -> list[dict[str, Any]]:
 
         return self.proximal_triples
 

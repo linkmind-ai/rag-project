@@ -1,23 +1,22 @@
 import asyncio
 import hashlib
-from typing import List, Optional, Dict, Any
 from datetime import datetime
-from elasticsearch import Elasticsearch, AsyncElasticsearch
-from langchain_community.embeddings import OllamaEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from typing import Any
 
-from models.state import Document, RetrievedContext
 from common.config import settings
+from elasticsearch import Elasticsearch
+from langchain_community.embeddings import OllamaEmbeddings
+from models.state import Document, RetrievedContext
 
 
 class ElasticsearchStore:
     """비동기 엘라스틱서치 벡터 스토어 관리 클래스"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.index_name = settings.ELASTICSEARCH_INDEX
         self.triples_index_name = f"{settings.ELASTICSEARCH_INDEX}_triples"
         self._es_client = Elasticsearch([settings.ELASTICSEARCH_URL])
-        self._embeddings: Optional[OllamaEmbeddings] = None
+        self._embeddings: OllamaEmbeddings | None = None
         self._initialized = False
 
     async def initialize(self) -> None:
@@ -72,14 +71,14 @@ class ElasticsearchStore:
                 },
             )
 
-    def _generate_doc_id(self, content: str, metadata: Dict[str, Any]) -> str:
+    def _generate_doc_id(self, content: str, metadata: dict[str, Any]) -> str:
         """문서 고유 ID 생성"""
-        content_hash = hashlib.md5(content.encode()).hexdigest()
+        content_hash = hashlib.md5(content.encode()).hexdigest()  # noqa: S324
         metadata_str = str(sorted(metadata.items()))
-        metadata_hash = hashlib.md5(metadata_str.encode()).hexdigest()
+        metadata_hash = hashlib.md5(metadata_str.encode()).hexdigest()  # noqa: S324
         return f"{content_hash[:8]}_{metadata_hash[:8]}"
 
-    async def add_documents(self, documents: List[Document]) -> List[str]:
+    async def add_documents(self, documents: list[Document]) -> list[str]:
         """문서 추가"""
         await self.initialize()
 
@@ -90,12 +89,12 @@ class ElasticsearchStore:
                 self._text_splitter.split_text, doc.content
             )
 
-            for i, chunk in enumerate(chunks):
+            for _chunk_idx, chunk in enumerate(chunks):
                 embedding = await asyncio.to_thread(self._embeddings.embed_query, chunk)
 
             chunk_metadata = {
                 **doc.metadata,
-                "chunk_index": i,
+                "chunk_index": _chunk_idx,
                 "total_chunks": len(chunks),
                 "origin_doc_id": doc.doc_id
                 or self._generate_doc_id(doc.content, doc.metadata),
@@ -121,7 +120,7 @@ class ElasticsearchStore:
         return document_ids
 
     async def similarity_search(
-        self, query: str, k: int = None, filters: Optional[Dict[str, Any]] = None
+        self, query: str, k: int | None = None, filters: dict[str, Any] | None = None
     ) -> RetrievedContext:
         """유사도 검색"""
         await self.initialize()
@@ -171,7 +170,7 @@ class ElasticsearchStore:
         )
 
     async def keyword_search(
-        self, query: str, k: int = None, filters: Optional[Dict[str, Any]] = None
+        self, query: str, k: int | None = None, filters: dict[str, Any] | None = None
     ) -> RetrievedContext:
         """키워드 기반 검색"""
         await self.initialize()
@@ -222,8 +221,8 @@ class ElasticsearchStore:
     async def hybrid_search(
         self,
         query: str,
-        k: int = None,
-        filters: Optional[Dict[str, Any]] = None,
+        k: int | None = None,
+        filters: dict[str, Any] | None = None,
         vector_weight: float = 0.5,
     ) -> RetrievedContext:
         """유사도 + 키워드 기반 검색"""
@@ -236,17 +235,21 @@ class ElasticsearchStore:
             self.keyword_search(query, k * 2, filters),
         )
 
-        doc_scores = Dict[str, tuple[Document, float]] = {}
+        doc_scores = dict[str, tuple[Document, float]] = {}
 
         max_vector_score = max(vector_results.scores) if vector_results.scores else 1.0
-        for doc, score in zip(vector_results.documents, vector_results.scores):
+        for doc, score in zip(
+            vector_results.documents, vector_results.scores, strict=True
+        ):
             normalized_score = score / max_vector_score
             doc_scores[doc.doc_id] = (doc, normalized_score * vector_weight)
 
         max_keyword_score = (
             max(keyword_results.scores) if keyword_results.scores else 1.0
         )
-        for doc, score in zip(keyword_results.documents, keyword_results.scores):
+        for doc, score in zip(
+            keyword_results.documents, keyword_results.scores, strict=True
+        ):
             normalized_score = score / max_keyword_score
             if doc.doc_id in doc_scores:
                 existing_doc, existing_score = doc_scores[doc.doc_id]
@@ -312,7 +315,7 @@ class ElasticsearchStore:
         self,
         doc_id: str,
         content: str,
-        metadata: Dict[str, Any],
+        metadata: dict[str, Any],
         extract_triples: bool = True,
     ) -> None:
         """Elasticsearch 인덱스 생성 및 initial triples 추출"""

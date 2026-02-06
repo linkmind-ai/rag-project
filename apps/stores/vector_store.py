@@ -15,6 +15,7 @@ import asyncio
 import hashlib
 import warnings
 from datetime import datetime
+from types import TracebackType
 from typing import Any
 
 import urllib3
@@ -70,7 +71,12 @@ class ElasticsearchStore:
         print("[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)")
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         """
         비동기 컨텍스트 매니저 종료 - 리소스 해제.
 
@@ -222,9 +228,9 @@ class ElasticsearchStore:
 
     def _generate_doc_id(self, content: str, metadata: dict[str, Any]) -> str:
         """문서 고유 ID 생성"""
-        content_hash = hashlib.md5(content.encode()).hexdigest()
+        content_hash = hashlib.md5(content.encode()).hexdigest()  # noqa: S324
         metadata_str = str(sorted(metadata.items()))
-        metadata_hash = hashlib.md5(metadata_str.encode()).hexdigest()
+        metadata_hash = hashlib.md5(metadata_str.encode()).hexdigest()  # noqa: S324
         return f"{content_hash[:8]}_{metadata_hash[:8]}"
 
     async def add_documents(self, documents: list[Document]) -> list[str]:
@@ -448,7 +454,7 @@ class ElasticsearchStore:
         # │                                                                      │
         # │   최종 수식:                                                          │
         # │   ┌─────────────────────────────────────────────────────────────────┐│
-        # │   │ final_score = (vec_score/max_vec × W) + (kw_score/max_kw × 1-W) ││
+        # │   │ final_score = (vec_score/max_vec x W) + (kw_score/max_kw x 1-W) ││
         # │   │                                                                 ││
         # │   │ 여기서 W = vector_weight (기본값 0.5)                           ││
         # │   └─────────────────────────────────────────────────────────────────┘│
@@ -463,7 +469,7 @@ class ElasticsearchStore:
         ):
             # 정규화: 현재 스코어 / 최대 스코어 (0~1 범위로 변환)
             normalized_score = score / max_vector_score
-            # 가중치 적용: 정규화 스코어 × 벡터 가중치
+            # 가중치 적용: 정규화 스코어 x 벡터 가중치
             doc_scores[doc.doc_id] = (doc, normalized_score * vector_weight)
 
         # ═══════════════════════════════════════════════════════════════

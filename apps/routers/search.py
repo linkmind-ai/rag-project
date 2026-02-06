@@ -14,7 +14,7 @@ router = APIRouter(prefix="/search", tags=["search"])
 
 
 @router.post("/vector", response_model=SearchResponse)
-async def vector_search_request(request: SearchRequest):
+async def vector_search_request(request: SearchRequest) -> SearchResponse:
     """벡터 유사도 검색"""
     async with request_semaphore:
         start_time = time.time()
@@ -33,7 +33,7 @@ async def vector_search_request(request: SearchRequest):
                     score=score,
                     metadata=doc.metadata,
                 )
-                for doc, score in zip(context.documents, context.scores)
+                for doc, score in zip(context.documents, context.scores, strict=True)
             ]
 
             return SearchResponse(
@@ -45,12 +45,12 @@ async def vector_search_request(request: SearchRequest):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"검색 오류 발생: {str(e)}",
-            )
+                detail=f"검색 오류 발생: {e!s}",
+            ) from e
 
 
 @router.post("/keyword", response_model=SearchResponse)
-async def keyword_search_request(request: SearchRequest):
+async def keyword_search_request(request: SearchRequest) -> SearchResponse:
     """키워드 기반 검색"""
     async with request_semaphore:
         start_time = time.time()
@@ -69,7 +69,7 @@ async def keyword_search_request(request: SearchRequest):
                     score=score,
                     metadata=doc.metadata,
                 )
-                for doc, score in zip(context.documents, context.scores)
+                for doc, score in zip(context.documents, context.scores, strict=True)
             ]
 
             return SearchResponse(
@@ -81,12 +81,12 @@ async def keyword_search_request(request: SearchRequest):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"검색 오류 발생: {str(e)}",
-            )
+                detail=f"검색 오류 발생: {e!s}",
+            ) from e
 
 
 @router.post("/hybrid", response_model=SearchResponse)
-async def hybrid_search_request(request: SearchRequest):
+async def hybrid_search_request(request: SearchRequest) -> SearchResponse:
     """하이브리드 검색"""
     async with request_semaphore:
         start_time = time.time()
@@ -105,7 +105,7 @@ async def hybrid_search_request(request: SearchRequest):
                     score=score,
                     metadata=doc.metadata,
                 )
-                for doc, score in zip(context.documents, context.scores)
+                for doc, score in zip(context.documents, context.scores, strict=True)
             ]
 
             return SearchResponse(
@@ -117,5 +117,5 @@ async def hybrid_search_request(request: SearchRequest):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"검색 오류 발생: {str(e)}",
-            )
+                detail=f"검색 오류 발생: {e!s}",
+            ) from e

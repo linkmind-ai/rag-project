@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, HTTPException, status
 from stores.memory_store import memory_store
 
@@ -5,7 +7,7 @@ router = APIRouter(prefix="/session", tags=["session"])
 
 
 @router.get("")
-async def get_sessions():
+async def get_sessions() -> dict[str, list[str] | int]:
     """메모리에 올라간 세션 목록 조회"""
     try:
         sessions = await memory_store.get_all_sessions()
@@ -13,12 +15,12 @@ async def get_sessions():
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"세션 조회 오류 발생: {str(e)}",
-        )
+            detail=f"세션 조회 오류 발생: {e!s}",
+        ) from e
 
 
 @router.get("/{session_id}/history")
-async def get_session_history(session_id: str):
+async def get_session_history(session_id: str) -> dict[str, Any]:
     """특정 세션 대화 이력 조회"""
     try:
         messages = await memory_store.get_recent_messages(session_id)
@@ -37,12 +39,12 @@ async def get_session_history(session_id: str):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"대화 이력 조회 오류 발생: {str(e)}",
-        )
+            detail=f"대화 이력 조회 오류 발생: {e!s}",
+        ) from e
 
 
 @router.delete("/{session_id}")
-async def clear_session(session_id: str):
+async def clear_session(session_id: str) -> dict[str, bool | str]:
     """특정 세션 대화 이력 삭제"""
     try:
         success = await memory_store.clear_history(session_id)
@@ -61,5 +63,5 @@ async def clear_session(session_id: str):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"세션 삭제 오류 발생: {str(e)}",
-        )
+            detail=f"세션 삭제 오류 발생: {e!s}",
+        ) from e

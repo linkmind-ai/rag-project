@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
+from types import TracebackType
 from typing import Any
 
 import aiohttp
@@ -114,7 +115,12 @@ class NotionConnector:
         )
         return self
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         """
         비동기 컨텍스트 매니저 종료 - HTTP 세션 종료.
 

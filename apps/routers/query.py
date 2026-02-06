@@ -1,6 +1,7 @@
 import asyncio
 import json
 import time
+from collections.abc import AsyncGenerator
 
 from common.config import settings
 from fastapi import APIRouter, HTTPException, status
@@ -15,7 +16,7 @@ router = APIRouter(prefix="/query", tags=["query"])
 
 
 @router.post("", response_model=QueryResponse)
-async def query(request: QueryRequest):
+async def query(request: QueryRequest) -> QueryResponse:
     """질의응답 엔드포인트"""
     async with request_semaphore:
         start_time = time.time()
@@ -37,7 +38,7 @@ async def query(request: QueryRequest):
                     "is_evidence": True,
                 }
                 for idx, doc in zip(
-                    response["evidence_indices"], response["evidence_docs"]
+                    response["evidence_indices"], response["evidence_docs"], strict=True
                 )
             ]
 
@@ -53,12 +54,12 @@ async def query(request: QueryRequest):
         except Exception as e:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"쿼리 처리 오류 발생: {str(e)}",
-            )
+                detail=f"쿼리 처리 오류 발생: {e!s}",
+            ) from e
 
 
 @router.post("/stream")
-async def query_stream(request: QueryRequest):
+async def query_stream(request: QueryRequest) -> StreamingResponse:
     """
     질의응답 스트리밍 엔드포인트
 
@@ -73,7 +74,7 @@ async def query_stream(request: QueryRequest):
     8. done: graph 처리 완료
     """
 
-    async def generate():
+    async def generate() -> AsyncGenerator[str, None]:
         try:
             yield f"data: {json.dumps({'type': 'session_id', 'session_id': request.session_id})}\n\n"
 

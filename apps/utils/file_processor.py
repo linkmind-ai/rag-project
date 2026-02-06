@@ -9,7 +9,7 @@ from models.state import Document
 class FileProcessor:
     """파일 처리 클래스"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._upload_dir = Path(settings.UPLOAD_DIR)
         self._upload_dir.mkdir(exist_ok=True)
 
@@ -56,7 +56,7 @@ class FileProcessor:
 
             documents = []
 
-            async def read_pdf():
+            async def read_pdf() -> None:
                 with open(file_path, "rb") as f:
                     pdf_reader = pypdf.PdfReader(f)
                     for page_num, page in enumerate(pdf_reader.pages):
@@ -77,15 +77,15 @@ class FileProcessor:
             await asyncio.to_thread(read_pdf)
             return documents
 
-        except ImportError:
-            raise ImportError("pypdf 실행 중 오류 발생")
+        except ImportError as e:
+            raise ImportError("pypdf 실행 중 오류 발생") from e
 
     async def process_docx_file(self, file_path: str) -> list[Document]:
         """DOCX 파일 처리 프로세스"""
         try:
             import docx
 
-            async def read_docx():
+            async def read_docx() -> str:
                 doc = docx.Document(file_path)
                 paragraphs = []
                 for para in doc.paragraphs:
@@ -107,8 +107,8 @@ class FileProcessor:
                 )
             ]
 
-        except ImportError:
-            raise ImportError("python-docx 실행 오류 발생")
+        except ImportError as e:
+            raise ImportError("python-docx 실행 오류 발생") from e
 
     async def process_md_file(self, file_path: str) -> list[Document]:
         """마크다운 처리 프로세스"""
