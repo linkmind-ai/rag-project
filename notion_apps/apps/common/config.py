@@ -7,15 +7,15 @@ class Settings(BaseSettings):
     
     # OLLAMA 설정
     OLLAMA_BASE_URL: str = Field(default="https://ollama.nabee.ai.kr/")
-    OLLAMA_MODEL: str = Field(default="EfCAHLahUiiJuB4jvu3_tA")
+    OLLAMA_MODEL: str = Field(default="")
 
     # 엘라스틱서치 설정
     ELASTICSEARCH_URL: str = Field(default="https://es.nabee.ai.kr/")
     ELASTICSEARCH_INDEX: str = Field(default="vector-test-index")
-    ELASTICSEARCH_USER: str = Field(default="TfsG65sBiLW-D9U8Xu4q")
-    ELASTICSEARCH_PASSWORD: str = Field(default="HRo4sn6jiCEt6qSE3uY5xg")
+    ELASTICSEARCH_USER: str = Field(default="")
+    ELASTICSEARCH_PASSWORD: str = Field(default="")
     EMBEDDING_MODEL: str = Field(default="bge-m3:latest")
-    EMBEDDING_DIM: int = Field(default=384)
+    EMBEDDING_DIM: int = Field(default=1024)
 
     #단일성 정체감의 장애 현상은 어떻게 나타나는가?
     # 벡터스토어 설정
@@ -48,3 +48,4 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 settings = Settings()
+
