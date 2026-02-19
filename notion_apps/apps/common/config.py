@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: list = Field(default=["txt", "pdf", "docx", "md"])
 
     # Notion 연동 설정
-    NOTION_TOKEN: str = Field(default="ntn_S49134845636QN7OizYlyythCTORUXOCvYcp2U19S0P6dy")
+    NOTION_TOKEN: str = Field(default="")
     NOTION_VERSION: str = Field(default="2022-06-28")
 
     class Config:
@@ -48,4 +48,5 @@ class Settings(BaseSettings):
         case_sensitive = True
 
 settings = Settings()
+
 
