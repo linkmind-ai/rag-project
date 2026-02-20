@@ -103,7 +103,7 @@ flowchart LR
 # 저장소 클론
 git clone https://github.com/your-repo/rag-project.git
 cd rag-project
-
+git switch notion-analysis
 # 가상환경 생성 및 활성화
 python -m venv .venv
 source .venv/bin/activate
@@ -112,7 +112,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 환경 변수 설정
-cp .env.example .env
+cp .env.sample .env
 # .env 파일을 편집하여 설정값 입력
 
 # 서버 실행
@@ -128,7 +128,7 @@ sudo apt update && sudo apt install python3.11 python3.11-venv
 # 저장소 클론
 git clone https://github.com/your-repo/rag-project.git
 cd rag-project
-
+git switch notion-analysis
 # 가상환경 생성 및 활성화
 python3.11 -m venv .venv
 source .venv/bin/activate
@@ -137,7 +137,7 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 # 환경 변수 설정
-cp .env.example .env
+cp .env.sample .env
 nano .env  # 설정값 편집
 
 # 서버 실행
@@ -262,7 +262,7 @@ rag-project/
 │   ├── golden_set.json     # 평가용 질문 세트
 │   ├── final_report.md     # 테스트 리포트
 │   └── user_test_log.md    # API 테스트 로그
-├── .env.example
+├── .env.sample
 ├── .gitignore
 ├── requirements.txt
 ├── CLAUDE.md               # AI 어시스턴트 지침
@@ -271,14 +271,14 @@ rag-project/
 
 ## 기술 스택
 
-| 분류 | 기술 |
-|------|------|
-| API Framework | FastAPI 0.109.0 |
-| Orchestration | LangGraph 0.0.20 |
-| Search Engine | Elasticsearch 8.11.1 |
+| 분류 | 기술                  |
+|------|---------------------|
+| API Framework | FastAPI 0.109.0     |
+| Orchestration | LangGraph 0.0.20    |
+| Search Engine | Elasticsearch 9.1.5 |
 | LLM | Ollama (EXAONE 4.0) |
-| Embedding | bge-m3 (1024차원) |
-| Data Validation | Pydantic v2 |
+| Embedding | bge-m3 (1024차원)     |
+| Data Validation | Pydantic v2         |
 
 ## 라이선스
 
