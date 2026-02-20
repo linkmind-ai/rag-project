@@ -94,7 +94,7 @@ flowchart LR
 ### 사전 요구사항
 
 - Python 3.11+
-- Elasticsearch 8.x
+- Elasticsearch 9.x
 - Ollama (또는 원격 Ollama 서버)
 
 ### macOS
