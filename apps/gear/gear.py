@@ -7,6 +7,7 @@ from typing import Any
 import kss
 import numpy as np
 from common.config import settings
+from common.logger import logger
 from gear.gist_store import GistMemory
 from konlpy.tag import Mecab
 from langchain_community.embeddings import OllamaEmbeddings
@@ -97,11 +98,11 @@ class GearRetriever:
             all_docs = await elasticsearch_store.get_all_documents_batch()
 
             if not all_docs:
-                print("벡터스토어 연결 또는 문서 존재 여부 확인 필요")
+                logger.warning("벡터스토어 연결 또는 문서 존재 여부 확인 필요")
                 self._initial_triples_cache = []
                 return
 
-            print(f"전체 문서 {len(all_docs)}개에서 initial triples 추출 중")
+            logger.info("전체 문서 {}개에서 initial triples 추출 중", len(all_docs))
 
             self._initial_triples_cache = await self._extract_triples_from_docs(
                 all_docs
@@ -110,7 +111,7 @@ class GearRetriever:
             await self._save_initial_triples_cache()
 
         except Exception as e:
-            print(f"Initial triples 추출 실패: {e}")
+            logger.error("Initial triples 추출 실패: {}", e)
             self._initial_triples_cache = []
 
     def rrf_fusion(
@@ -140,7 +141,7 @@ class GearRetriever:
 
             return []
         except Exception as e:
-            print(f"triples 파싱 오류: {e}")
+            logger.warning("triples 파싱 오류: {}", e)
             return []
 
     async def reader(
@@ -186,7 +187,7 @@ class GearRetriever:
             return triples
 
         except Exception as e:
-            print(f"triples 추출 오류: {e}")
+            logger.error("triples 추출 오류: {}", e)
             return []
 
     def _triple_to_text(self, triple: dict[str, Any]) -> str:
@@ -246,7 +247,7 @@ class GearRetriever:
             )
             proximal_emb = np.array(proximal_emb)
         except Exception as e:
-            print(f"proximal triples 임베딩 오류: {e}")
+            logger.warning("proximal triples 임베딩 오류: {}", e)
             return None
 
         best_match = None
@@ -288,9 +289,11 @@ class GearRetriever:
         if not self._initial_triples_cache:
             return proximal_triples
 
-        print("triples 링크 시작: ")
-        print(f"proximal triples: {len(proximal_triples)}개")
-        print(f"_initial triples: {len(self._initial_triples_cache)}개")
+        logger.debug(
+            "triples 링크 시작: proximal={}개, initial={}개",
+            len(proximal_triples),
+            len(self._initial_triples_cache),
+        )
 
         linked_triples = []
 
@@ -309,7 +312,9 @@ class GearRetriever:
 
             linked_triples.append(linked_triple)
 
-        print(f"연결완료: {sum(1 for t in linked_triples if t['linked_to'])}개 매칭")
+        logger.debug(
+            "연결완료: {}개 매칭", sum(1 for t in linked_triples if t["linked_to"])
+        )
         return linked_triples
 
     async def graph_expansion(
@@ -393,7 +398,7 @@ class GearRetriever:
             return False, "현재 triples로 답변 불가능"
 
         except Exception as e:
-            print(f"판단 가능여부 추론 오류: {e}")
+            logger.error("판단 가능여부 추론 오류: {}", e)
             return False, str(e)
 
     async def rewrite_query(
@@ -425,7 +430,7 @@ class GearRetriever:
             return result if result else original_query
 
         except Exception as e:
-            print(f"쿼리 rewriting 오류: {e}")
+            logger.warning("쿼리 rewriting 오류: {}", e)
             return original_query
 
     async def gear_retrieve(
@@ -439,17 +444,18 @@ class GearRetriever:
         step = 1
         all_retrived_passages = []
 
-        print(f"Gear 검색 시작: {query}")
+        logger.info("Gear 검색 시작: {}", query)
 
         while step <= max_steps:
-            print(f"\n 리트리버 {step}/{max_steps} 번째 step")
-            print(f"쿼리: {current_query}")
+            logger.debug(
+                "리트리버 {}/{} 번째 step | 쿼리: {}", step, max_steps, current_query
+            )
 
             base_context = await elasticsearch_store.hybrid_search(
                 query=current_query, k=top_k
             )
             base_passages = base_context.documents
-            print(f"리트리버 결과: {len(base_passages)}개 문서")
+            logger.debug("리트리버 결과: {}개 문서", len(base_passages))
 
             if step == 1:
                 proximal_triples = await self.reader(base_passages, query)
@@ -457,14 +463,14 @@ class GearRetriever:
                 proximal_triples = await self.reader(
                     base_passages, query, gist_memory.get_all_triples()
                 )
-            print(f"proximal triples 추출: {len(proximal_triples)}개")
+            logger.debug("proximal triples 추출: {}개", len(proximal_triples))
 
             triples = await self.triple_link(proximal_triples)
 
             expanded_passages = await self.graph_expansion(
                 triples, query, max_docs=top_k
             )
-            print(f"그래프 확장 후 {len(expanded_passages)}개 문서")
+            logger.debug("그래프 확장 후 {}개 문서", len(expanded_passages))
 
             combined_passages = self.rrf_fusion([base_passages, expanded_passages])
             all_retrived_passages.append(combined_passages)
@@ -474,46 +480,45 @@ class GearRetriever:
             is_answerable, reasoning = await self.reason(
                 gist_memory.get_all_triples(), query
             )
-            print(f"답변 가능 여부: {is_answerable}")
-            print(f"답변 가능 여부 판단 근거: {reasoning}")
+            logger.debug("답변 가능 여부: {} | 근거: {}", is_answerable, reasoning)
 
             if is_answerable:
-                print(f"\n 답변 가능한 정보 수집 완료(step {step})")
+                logger.info("답변 가능한 정보 수집 완료 (step {})", step)
                 break
             else:
                 if step < max_steps:
                     current_query = await self.rewrite_query(
                         query, gist_memory.get_all_triples(), reasoning
                     )
-                    print(f"쿼리 재작성: {current_query}")
+                    logger.debug("쿼리 재작성: {}", current_query)
                 step += 1
 
         final_passages = self.rrf_fusion(all_retrived_passages)
 
-        print(f"\n최종결과: {len(final_passages)}개 문서")
+        logger.info("Gear 검색 완료: 최종 {}개 문서", len(final_passages))
         return final_passages[:top_k], gist_memory
 
     async def sync_ge_retreive(self, query: str, top_k: int = 5) -> list[Document]:
         """SyncGE 검색"""
         await self.initialize()
 
-        print(f"SyncGE 검색: {query}")
+        logger.info("SyncGE 검색 시작: {}", query)
 
         base_context = await elasticsearch_store.hybrid_search(query=query, k=top_k)
         base_passages = base_context.documents
-        print(f"1. 기본 검색: {len(base_passages)}개")
+        logger.debug("1. 기본 검색: {}개", len(base_passages))
 
         proximal_triples = await self.reader(base_passages, query)
-        print(f"2. triples 추출: {len(proximal_triples)}개")
+        logger.debug("2. triples 추출: {}개", len(proximal_triples))
 
         triples = await self.triple_link(proximal_triples)
 
         expanded_passages = await self.graph_expansion(triples, query, max_docs=top_k)
-        print(f"3. 그래프 확장: {len(expanded_passages)}개")
+        logger.debug("3. 그래프 확장: {}개", len(expanded_passages))
 
         combined_passages = self.rrf_fusion([base_passages, expanded_passages])
 
-        print(f"4. 최종 근거 문서: {len(combined_passages[:top_k])}개")
+        logger.info("4. SyncGE 완료: 최종 {}개", len(combined_passages[:top_k]))
         return combined_passages[:top_k]
 
 

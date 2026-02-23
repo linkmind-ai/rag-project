@@ -20,6 +20,7 @@ from typing import Any
 
 import urllib3
 from common.config import settings
+from common.logger import logger
 from elasticsearch import AsyncElasticsearch
 from langchain_community.embeddings import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -66,9 +67,13 @@ class ElasticsearchStore:
         │   - RecursiveCharacterTextSplitter 인스턴스                 │
         └──────────────────────────────────────────────────────────────┘
         """
-        print(f"[ElasticsearchStore] __aenter__: 리소스 할당 시작 (id={id(self)})")
+        logger.debug(
+            "[ElasticsearchStore] __aenter__: 리소스 할당 시작 (id={})", id(self)
+        )
         await self.initialize()
-        print("[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)")
+        logger.debug(
+            "[ElasticsearchStore] __aenter__: 리소스 할당 완료 (ES 연결 활성화)"
+        )
         return self
 
     async def __aexit__(
@@ -91,14 +96,17 @@ class ElasticsearchStore:
         │ 예외 발생 시에도 반드시 실행됨 (finally와 동일)              │
         └──────────────────────────────────────────────────────────────┘
         """
-        print(f"[ElasticsearchStore] __aexit__: 리소스 해제 시작 (id={id(self)})")
+        logger.debug(
+            "[ElasticsearchStore] __aexit__: 리소스 해제 시작 (id={})", id(self)
+        )
         if exc_type:
-            print(
-                f"[ElasticsearchStore] __aexit__: 예외 감지 - "
-                f"{exc_type.__name__}: {exc_val}"
+            logger.warning(
+                "[ElasticsearchStore] __aexit__: 예외 감지 - {}: {}",
+                exc_type.__name__,
+                exc_val,
             )
         await self.close()
-        print("[ElasticsearchStore] __aexit__: 리소스 해제 완료 (ES 연결 종료)")
+        logger.debug("[ElasticsearchStore] __aexit__: 리소스 해제 완료 (ES 연결 종료)")
 
     async def initialize(self) -> None:
         """

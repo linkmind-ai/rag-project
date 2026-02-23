@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from common.logger import logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import document, notion, query, search, session, system
@@ -14,13 +15,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """어플리케이션 수명 관리"""
     await elasticsearch_store.initialize()
     await rag_service.initialize()
-    print("RAG시스템 초기화 완료")
+    logger.info("RAG 시스템 초기화 완료")
 
     yield
 
     await elasticsearch_store.close()
     await notion_connector.close()
-    print("RAG 시스템 종료")
+    logger.info("RAG 시스템 종료")
 
 
 app = FastAPI(

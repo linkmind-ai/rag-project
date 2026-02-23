@@ -38,16 +38,14 @@ Notion API 연동 모듈.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Iterable
 from types import TracebackType
 from typing import Any
 
 import aiohttp
 from common.config import settings
+from common.logger import logger
 from models.state import Document
-
-logger = logging.getLogger(__name__)
 
 
 class NotionConnector:
@@ -104,14 +102,14 @@ class NotionConnector:
         └──────────────────────────────────────────────────────────────┘
         """
         logger.debug(
-            "notion_connector_enter",
-            extra={"connector_id": id(self), "timeout": self._timeout.total},
+            "[NotionConnector] __aenter__: HTTP 세션 초기화 (id={}, timeout={}s)",
+            id(self),
+            self._timeout.total,
         )
-        print(f"[NotionConnector] __aenter__: HTTP 세션 초기화 (id={id(self)})")
         await self._get_session()
-        print(
-            f"[NotionConnector] __aenter__: 세션 준비 완료 "
-            f"(타임아웃: {self._timeout.total}초)"
+        logger.debug(
+            "[NotionConnector] __aenter__: 세션 준비 완료 (타임아웃: {}초)",
+            self._timeout.total,
         )
         return self
 
@@ -137,20 +135,15 @@ class NotionConnector:
         │       경고 발생 및 잠재적 리소스 누수                        │
         └──────────────────────────────────────────────────────────────┘
         """
-        logger.debug(
-            "notion_connector_exit",
-            extra={
-                "connector_id": id(self),
-                "exception_type": exc_type.__name__ if exc_type else None,
-            },
-        )
-        print(f"[NotionConnector] __aexit__: 세션 종료 시작 (id={id(self)})")
+        logger.debug("[NotionConnector] __aexit__: 세션 종료 시작 (id={})", id(self))
         if exc_type:
-            print(
-                f"[NotionConnector] __aexit__: 예외 감지 - {exc_type.__name__}: {exc}"
+            logger.warning(
+                "[NotionConnector] __aexit__: 예외 감지 - {}: {}",
+                exc_type.__name__,
+                exc,
             )
         await self.close()
-        print("[NotionConnector] __aexit__: 세션 종료 완료 (TCP 연결 반환)")
+        logger.debug("[NotionConnector] __aexit__: 세션 종료 완료 (TCP 연결 반환)")
 
     async def _get_session(self) -> aiohttp.ClientSession:
         """aiohttp 세션을 지연 생성하여 반환합니다."""

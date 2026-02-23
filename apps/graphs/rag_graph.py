@@ -23,6 +23,7 @@ from types import TracebackType
 from typing import Any
 
 from common.config import settings
+from common.logger import logger
 from langchain_community.llms import Ollama
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
@@ -132,9 +133,13 @@ class RAGGraph:
         │   - 프롬프트 템플릿 바인딩                                   │
         └──────────────────────────────────────────────────────────────┘
         """
-        print(f"[RAGGraph] __aenter__: LLM 및 그래프 초기화 시작 (id={id(self)})")
+        logger.debug(
+            "[RAGGraph] __aenter__: LLM 및 그래프 초기화 시작 (id={})", id(self)
+        )
         await self.initialize()
-        print(f"[RAGGraph] __aenter__: 초기화 완료 (모델: {settings.OLLAMA_MODEL})")
+        logger.info(
+            "[RAGGraph] __aenter__: 초기화 완료 (모델: {})", settings.OLLAMA_MODEL
+        )
         return self
 
     async def __aexit__(
@@ -157,11 +162,13 @@ class RAGGraph:
         │ 참고: LLM 인스턴스는 stateless하여 별도 종료 불필요         │
         └──────────────────────────────────────────────────────────────┘
         """
-        print(f"[RAGGraph] __aexit__: 리소스 정리 시작 (id={id(self)})")
+        logger.debug("[RAGGraph] __aexit__: 리소스 정리 시작 (id={})", id(self))
         if exc_type:
-            print(f"[RAGGraph] __aexit__: 예외 감지 - {exc_type.__name__}: {exc_val}")
+            logger.warning(
+                "[RAGGraph] __aexit__: 예외 감지 - {}: {}", exc_type.__name__, exc_val
+            )
         await self.close()
-        print("[RAGGraph] __aexit__: 리소스 정리 완료")
+        logger.debug("[RAGGraph] __aexit__: 리소스 정리 완료")
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -399,8 +406,7 @@ class RAGGraph:
             return []
 
         except (json.JSONDecodeError, ValueError, TypeError) as e:
-            print(f"근거 응답 파싱 오류: {e}")
-            print(f"원본 응답: {response}")
+            logger.warning("근거 응답 파싱 오류: {} | 원본: {}", e, response)
 
             numbers = re.findall(r"\d+", response)
             if numbers:
@@ -492,7 +498,7 @@ class RAGGraph:
         )
         keyword_indices = {idx for idx, _, _ in keyword_candidates}
 
-        print(f"[N3] 키워드 기반 후보: {keyword_candidates[:5]}")
+        logger.debug("[N3] 키워드 기반 후보: {}", keyword_candidates[:5])
 
         # ========== 2단계: LLM 기반 근거 식별 ==========
         documents_text = "\n\n".join(
@@ -519,7 +525,7 @@ class RAGGraph:
 
             # 유효 범위 필터링 (인덱스 범위 초과 방지)
             llm_indices = [idx for idx in llm_indices if 0 <= idx < len(retrieved_docs)]
-            print(f"[N3] LLM 선택 인덱스: {llm_indices}")
+            logger.debug("[N3] LLM 선택 인덱스: {}", llm_indices)
 
             # ═══════════════════════════════════════════════════════════════
             # [3단계] 하이브리드 결합: LLM + 키워드 매칭 교차 검증
@@ -541,10 +547,11 @@ class RAGGraph:
             for idx, overlap_ratio, matched in keyword_candidates:
                 if overlap_ratio >= reinforce_threshold:
                     if idx not in final_indices_set:
-                        kw_sample = list(matched)[:5]
-                        print(
-                            f"[N3] 키워드 기반 보강: 문서 {idx} "
-                            f"(일치도: {overlap_ratio:.2%}, 키워드: {kw_sample})"
+                        logger.debug(
+                            "[N3] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
+                            idx,
+                            overlap_ratio,
+                            list(matched)[:5],
                         )
                     final_indices_set.add(idx)
 
@@ -568,19 +575,20 @@ class RAGGraph:
                         answer, retrieved_docs[idx].content
                     )
                     if overlap < hallucination_threshold:
-                        print(
-                            f"[N3] 낮은 일치도로 제거: 문서 {idx} "
-                            f"(일치도: {overlap:.2%})"
+                        logger.debug(
+                            "[N3] 낮은 일치도로 제거: 문서 {} (일치도: {:.2%})",
+                            idx,
+                            overlap,
                         )
                         final_indices_set.discard(idx)
 
             final_indices = sorted(final_indices_set)
-            print(f"[N3] 최종 evidence_indices: {final_indices}")
+            logger.info("[N3] 최종 evidence_indices: {}", final_indices)
 
             return {"evidence_indices": final_indices}
 
         except Exception as e:
-            print(f"근거 문서 식별 오류: {e}")
+            logger.error("근거 문서 식별 오류: {}", e)
             # Fallback: LLM 실패 시 키워드 기반 결과만 사용
             fallback_indices = [
                 idx for idx, ratio, _ in keyword_candidates if ratio >= 0.15
@@ -601,7 +609,7 @@ class RAGGraph:
         try:
             await elasticsearch_store.close()
         except Exception as e:
-            print(f"[RAGGraph] 리소스 정리 중 오류: {e}")
+            logger.error("[RAGGraph] 리소스 정리 중 오류: {}", e)
         finally:
             self._initialized = False
 

@@ -4,6 +4,7 @@ import re
 from typing import Any
 
 from common.config import settings
+from common.logger import logger
 from gear import gear_retriever
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
 from langchain_community.llms import Ollama
@@ -150,8 +151,7 @@ class RAGGraph:
             return []
 
         except (json.JSONDecodeError, ValueError, TypeError) as e:
-            print(f"근거 응답 파싱 오류: {e}")
-            print(f"원본 응답: {response}")
+            logger.warning("근거 응답 파싱 오류: {} | 원본: {}", e, response)
 
             numbers = re.findall(r"\d+", response)
             if numbers:
@@ -188,7 +188,7 @@ class RAGGraph:
             return {"evidence_indices": valid_indices}
 
         except Exception as e:
-            print(f"근거 문서 식별 오류: {e}")
+            logger.error("근거 문서 식별 오류: {}", e)
             return {"evidence_indices": list(range(len(retrieved_docs)))}
 
     def get_graph(self) -> CompiledStateGraph | None:

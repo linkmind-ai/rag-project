@@ -40,17 +40,14 @@ Note:
 """
 
 import asyncio
-import logging
 import time
 from collections.abc import AsyncGenerator
 from typing import Any
 
+from common.logger import logger
 from graphs.rag_graph import rag_graph
 from langchain_core.runnables import RunnableConfig
 from stores.memory_store import memory_store
-
-# 로거 설정 - 처리 시간 및 에러 추적용
-logger = logging.getLogger(__name__)
 
 
 class RAGService:
