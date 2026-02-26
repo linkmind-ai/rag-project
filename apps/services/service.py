@@ -46,6 +46,7 @@ from typing import Any
 
 from common.logger import logger
 from graphs.rag_graph import rag_graph
+from graphs.corrective_rag_graph import corrective_rag_graph
 from langchain_core.runnables import RunnableConfig
 from stores.memory_store import memory_store
 
