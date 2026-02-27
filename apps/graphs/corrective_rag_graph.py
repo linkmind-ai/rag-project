@@ -257,6 +257,10 @@ class CRAGGraph:
 
         # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
         workflow.add_node("retrieve", self._retrieve_node)
+        workflow.add_node("grade_documents", self._grade_documents_node)
+        workflow.add_node("query_rewrite", self._query_rewrite_node)
+        workflow.add_node("web_search", self._web_search_node)
+        workflow.add_node("prompt_compression", self._prompt_compression_node)
         workflow.add_node("generate", self._generate_node)
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
@@ -264,7 +268,19 @@ class CRAGGraph:
         workflow.set_entry_point("retrieve")
 
         # 엣지 연결: 노드 간 순차 실행 순서 정의
-        workflow.add_edge("retrieve", "generate")
+        workflow.add_edge("retrieve", "grade_documents")
+        workflow.add_conditional_edges(
+            "grade_documents",
+            self._decide_to_web_search,
+            {
+                "query_rewrite": "query_rewrite",
+                "prompt_compression": "prompt_compression",
+            },
+        )
+        workflow.add_edge("query_rewrite", "web_search")
+        workflow.add_edge("web_search", "prompt_compression")
+        workflow.add_edge("prompt_compression", "generate")
+
         workflow.add_edge("generate", "identify_evidence")
         workflow.add_edge("identify_evidence", END)  # END는 그래프 종료 마커
 
@@ -280,6 +296,36 @@ class CRAGGraph:
         )
 
         return {"retrieved_docs": context.documents}
+
+    async def _grade_documents_node(self, state: GraphState) -> dict[str, Any]:
+        """검색된 chunk"""
+        return {"retrieved_docs": filtered_docs, "web_search": web_search}
+
+    async def _query_rewrite_node(self, state: GraphState) -> dict[str, Any]:
+        """기존의 쿼리를 웹 검색에 최적화된 쿼리로 재작성"""
+        return {"query_for_web_search": query_for_web_search}
+
+    async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
+        """refined_question으로 웹 검색"""
+        return {"retrieved_docs": documents}
+
+    async def _prompt_compression_node(self, state: GraphState) -> dict[str, Any]:
+        """query와 documents를 결합해서 프롬프트 생성 후 LongLLMLingua로 압축"""
+        return {"prompt": prompt}
+
+    def _decide_to_web_search(self, state: GraphState):
+        """grade_documents 노드에서 판별한 웹 검색 필요여부에 따라 쿼리를 routing"""
+        web_search = state.web_search
+
+        if web_search:
+            # 웹 검색으로 정보 보강이 필요한 경우
+            print("==== [DECISION: QUERY REWRITE FOR WEB SEARCH] ====")
+            # 쿼리 재작성 노드로 라우팅
+            return "query_rewrite"
+        else:
+            # 관련 문서가 존재하므로 답변 생성 단계(generate) 로 진행
+            print("==== [DECISION: GENERATE] ====")
+            return "prompt_compression"
 
     def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
         """
