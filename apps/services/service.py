@@ -156,7 +156,7 @@ class RAGService:
 
             # 실제 초기화 수행
             logger.debug("[RAGService] 초기화 시작...")
-            await rag_graph.initialize()
+            await corrective_rag_graph.initialize()
             self._initialized = True
             logger.debug("[RAGService] 초기화 완료")
 
@@ -222,7 +222,6 @@ class RAGService:
         """
         # 처리 시간 측정 시작
         start_time = time.time()
-
         await self.initialize()
 
         # 대화 이력 로드 (선택적)
@@ -234,11 +233,11 @@ class RAGService:
             )
 
         # 그래프 초기 상태 준비
-        initial_state = await rag_graph.prepare_state(
+        initial_state = await corrective_rag_graph.prepare_state(
             query=query, session_id=session_id, chat_history=chat_history
         )
 
-        graph = rag_graph.get_graph()
+        graph = corrective_rag_graph.get_graph()
 
         # ┌─────────────────────────────────────────────────────────────┐
         # │            Pydantic → Dict 변환 (model_dump) 필요성          │
@@ -378,7 +377,7 @@ class RAGService:
                 )
 
             # 그래프 초기 상태 준비
-            initial_state = await rag_graph.prepare_state(
+            initial_state = await corrective_rag_graph.prepare_state(
                 query=query, session_id=session_id, chat_history=chat_history
             )
 
@@ -392,7 +391,7 @@ class RAGService:
                 }
             )
 
-            graph = rag_graph.get_graph()
+            graph = corrective_rag_graph.get_graph()
 
             # 상태 변수 초기화
             full_response = ""
