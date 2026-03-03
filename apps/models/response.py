@@ -1,74 +1,72 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-
 from models.state import SearchResult
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class QueryResponse(BaseModel):
-    """쿼리 응답 모델"""
+    """Query response model."""
 
-    session_id: str = Field(..., description="세션 ID")
-    answer: str = Field(..., description="LLM 응답")
-    sources: list[dict[str, Any]] = Field(
-        default_factory=list, description="응답 근거 내용과 스코어"
-    )
-    processing_time: float = Field(..., description="처리 시간")
+    session_id: str = Field(...)
+    answer: str = Field(...)
+    sources: list[dict[str, Any]] = Field(default_factory=list)
+    processing_time: float = Field(...)
+    meta: dict[str, Any] | None = Field(default=None)
 
     model_config = ConfigDict(frozen=False)
 
 
 class AddDocumentResponse(BaseModel):
-    """문서 추가 응답 모델"""
+    """Document add response model."""
 
-    success: bool = Field(..., description="성공 여부")
-    message: str = Field(..., description="응답 메시지")
-    document_ids: list[str] = Field(default_factory=list, description="문서 ID")
+    success: bool = Field(...)
+    message: str = Field(...)
+    document_ids: list[str] = Field(default_factory=list)
 
     model_config = ConfigDict(frozen=False)
 
 
 class FileUploadResponse(BaseModel):
-    """파일 업로드 응답 모델"""
+    """File upload response model."""
 
-    success: bool = Field(..., description="성공 여부")
-    message: str = Field(..., description="응답 메시지")
-    filename: str = Field(..., description="파일명")
-    document_ids: list[str] = Field(default_factory=list, description="업로드 문서 ID")
-    chunks_count: int = Field(..., description="생성된 청크 수")
+    success: bool = Field(...)
+    message: str = Field(...)
+    filename: str = Field(...)
+    document_ids: list[str] = Field(default_factory=list)
+    chunks_count: int = Field(...)
 
     model_config = ConfigDict(frozen=False)
 
 
 class HealthResponse(BaseModel):
-    """헬스 체크 응답 모델"""
+    """Health check response model."""
 
-    status: str = Field(..., description="서비스 상태")
-    elasticsearch_connected: bool = Field(..., description="엘라스틱서치 연결 상태")
+    status: str = Field(...)
+    elasticsearch_connected: bool = Field(...)
     timestamp: datetime = Field(default_factory=datetime.now)
 
     model_config = ConfigDict(frozen=False)
 
 
 class SearchResponse(BaseModel):
-    """검색 응답 모델"""
+    """Search response model."""
 
-    results: list[SearchResult] = Field(default_factory=list, description="검색 결과")
-    total_hits: int = Field(..., description="검색 건수")
-    processing_time: float = Field(..., description="처리 시간")
+    results: list[SearchResult] = Field(default_factory=list)
+    total_hits: int = Field(...)
+    processing_time: float = Field(...)
 
     model_config = ConfigDict(frozen=False)
 
 
 class NotionPageResponse(BaseModel):
-    """노션 페이지 가져오기 응답 모델"""
+    """Notion import response model."""
 
-    success: bool = Field(..., description="성공 여부")
-    message: str = Field(..., description="응답 메시지")
-    page_id: str = Field(..., description="노션 페이지 ID")
-    page_title: str = Field(..., description="노션 페이지 제목")
-    document_ids: list[str] = Field(default_factory=list, description="생성 문서 ID")
-    chunks_count: int = Field(..., description="생성된 청크 수")
+    success: bool = Field(...)
+    message: str = Field(...)
+    page_id: str = Field(...)
+    page_title: str = Field(...)
+    document_ids: list[str] = Field(default_factory=list)
+    chunks_count: int = Field(...)
 
     model_config = ConfigDict(frozen=False)

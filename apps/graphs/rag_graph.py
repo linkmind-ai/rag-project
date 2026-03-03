@@ -1,20 +1,4 @@
-"""
-LangGraph 기반 RAG 워크플로우 모듈.
-
-이 모듈은 검색-증강-생성(RAG) 파이프라인의 핵심 오케스트레이션을 담당합니다.
-
-워크플로우 구조 (3-노드 순차 실행):
-┌─────────────┐    ┌─────────────┐    ┌───────────────────┐
-│  retrieve   │ -> │  generate   │ -> │ identify_evidence │
-│ (하이브리드 │    │ (LLM 응답   │    │ (근거 문서 식별)  │
-│  검색)      │    │  생성)      │    │                   │
-└─────────────┘    └─────────────┘    └───────────────────┘
-
-핵심 기능:
-- N1: 하이브리드 검색 (벡터 + BM25)
-- N2: 컨텍스트 기반 응답 생성 (대화 이력 지원)
-- N3: LLM + 키워드 하이브리드 근거 식별
-"""
+from __future__ import annotations
 
 import asyncio
 import json
@@ -27,114 +11,52 @@ from langchain_community.llms import Ollama
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from models.state import Document, GraphState, Message
+from models.state import (
+    Document,
+    EvidenceBundleE0,
+    GlobalMessagePoolM0,
+    GraphState,
+    Message,
+    RouteDecision,
+    SelfRagScores,
+)
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from prompts.persona_contextual_retrieval_prompt import (
+    _PERSONA_CONTEXTUAL_RETRIEVAL_PROMPT,
+)
+from prompts.persona_rerank_prompt import _PERSONA_RERANK_PROMPT
+from prompts.route_query_prompt import _ROUTE_QUERY_PROMPT
+from prompts.selfrag_critique_prompt import _SELFRAG_CRITIQUE_PROMPT
+from prompts.selfrag_draft_prompt import _SELFRAG_DRAFT_PROMPT
+from prompts.selfrag_rewrite_prompt import _SELFRAG_REWRITE_PROMPT
+from prompts.transparency_prompt import _TRANSPARENCY_PROMPT
+from stores.memory_store import memory_store
 from stores.vector_store import elasticsearch_store
 
-# ========== 한국어 불용어 (Stopwords) ==========
-# 키워드 기반 근거 식별 시 노이즈를 제거하기 위한 불용어 집합.
-# 조사, 접속사, 대명사 등 의미적 가치가 낮은 단어들을 필터링하여
-# 핵심 키워드 매칭의 정확도를 높입니다.
-# ==============================================
-_KOREAN_STOPWORDS: set[str] = {
-    "은",
-    "는",
-    "이",
-    "가",
-    "을",
-    "를",
-    "의",
-    "에",
-    "에서",
-    "와",
-    "과",
-    "도",
-    "로",
-    "으로",
-    "만",
-    "까지",
-    "부터",
-    "처럼",
-    "같이",
-    "보다",
-    "라고",
-    "하고",
-    "그",
-    "저",
-    "이것",
-    "그것",
-    "저것",
-    "여기",
-    "거기",
-    "저기",
-    "무엇",
-    "어디",
-    "있다",
-    "없다",
-    "하다",
-    "되다",
-    "이다",
-    "아니다",
-    "그리고",
-    "그러나",
-    "하지만",
-    "또는",
-    "혹은",
-    "및",
-    "등",
-    "때문",
-    "위해",
-    "통해",
-    "대해",
-    "관해",
-}
+_STOPWORDS = {"the", "a", "an", "and", "or", "to", "of", "in", "on", "is", "are"}
 
 
 class RAGGraph:
-    """
-    LangGraph 기반 RAG 워크플로우 관리 클래스.
-
-    이 클래스는 검색-생성-근거식별의 3단계 파이프라인을 구성하고 실행합니다.
-    StateGraph를 사용하여 각 노드 간 상태 전달과 순차 실행을 보장합니다.
-
-    Attributes:
-        _llm: Ollama LLM 인스턴스 (지연 초기화)
-        _graph: 컴파일된 LangGraph StateGraph
-        _initialized: 초기화 완료 플래그 (Double-Checked Locking용)
-        _lock: 동시성 제어를 위한 비동기 락
-        chat_prompt: 단일 쿼리용 프롬프트 템플릿
-        chat_with_history_prompt: 대화 이력 포함 프롬프트 템플릿
-        get_evidence_prompt: 근거 문서 식별용 프롬프트 템플릿
-    """
-
     def __init__(self) -> None:
         self._llm: Ollama | None = None
-        self._graph = None
+        self._graph: CompiledStateGraph | None = None
         self._initialized = False
         self._lock = asyncio.Lock()
         self.chat_prompt = _CHAT_PROMPT
         self.chat_with_history_prompt = _CHAT_WITH_HISTORY_PROMPT
         self.get_evidence_prompt = _GET_EVIDENCE_PROMPT
+        self.route_query_prompt = _ROUTE_QUERY_PROMPT
+        self.persona_contextual_prompt = _PERSONA_CONTEXTUAL_RETRIEVAL_PROMPT
+        self.persona_rerank_prompt = _PERSONA_RERANK_PROMPT
+        self.selfrag_draft_prompt = _SELFRAG_DRAFT_PROMPT
+        self.selfrag_critique_prompt = _SELFRAG_CRITIQUE_PROMPT
+        self.selfrag_rewrite_prompt = _SELFRAG_REWRITE_PROMPT
+        self.transparency_prompt = _TRANSPARENCY_PROMPT
 
     async def __aenter__(self) -> "RAGGraph":
-        """
-        비동기 컨텍스트 매니저 진입 - LLM 및 그래프 초기화.
-
-        ┌──────────────────────────────────────────────────────────────┐
-        │               리소스 생명주기 추적 (Telemetry)               │
-        │ ──────────────────────────────────────────────────────────── │
-        │ 진입 시점: async with RAGGraph() as graph:                  │
-        │ 할당 리소스:                                                 │
-        │   - Ollama LLM 인스턴스 (HTTP 연결 포함)                    │
-        │   - LangGraph StateGraph 컴파일된 워크플로우                │
-        │   - 프롬프트 템플릿 바인딩                                   │
-        └──────────────────────────────────────────────────────────────┘
-        """
-        print(f"[RAGGraph] __aenter__: LLM 및 그래프 초기화 시작 (id={id(self)})")
         await self.initialize()
-        print(f"[RAGGraph] __aenter__: 초기화 완료 (모델: {settings.OLLAMA_MODEL})")
         return self
 
     async def __aexit__(
@@ -143,467 +65,638 @@ class RAGGraph:
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """
-        비동기 컨텍스트 매니저 종료 - 연결 리소스 정리.
-
-        ┌──────────────────────────────────────────────────────────────┐
-        │               리소스 해제 보장 (메모리 누수 방지)            │
-        │ ──────────────────────────────────────────────────────────── │
-        │ 종료 시점: with 블록 종료 또는 예외 발생 시                  │
-        │ 해제 리소스:                                                 │
-        │   - ElasticsearchStore 연결 종료 (위임)                     │
-        │   - 초기화 플래그 리셋                                       │
-        │                                                             │
-        │ 참고: LLM 인스턴스는 stateless하여 별도 종료 불필요         │
-        └──────────────────────────────────────────────────────────────┘
-        """
-        print(f"[RAGGraph] __aexit__: 리소스 정리 시작 (id={id(self)})")
-        if exc_type:
-            print(f"[RAGGraph] __aexit__: 예외 감지 - {exc_type.__name__}: {exc_val}")
         await self.close()
-        print("[RAGGraph] __aexit__: 리소스 정리 완료")
 
     async def initialize(self) -> None:
         if self._initialized:
             return
-
         async with self._lock:
             if self._initialized:
                 return
-
             self._llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.OLLAMA_MODEL,
-                temperature=1.0,
+                temperature=0.4,
             )
-
             self._build_graph()
             self._initialized = True
 
     def _build_graph(self) -> None:
-        """
-        LangGraph 워크플로우 구조 빌드.
-
-        ┌──────────────────────────────────────────────────────────────────────┐
-        │                    LangGraph 상태 전이 과정 상세                       │
-        ├──────────────────────────────────────────────────────────────────────┤
-        │                                                                      │
-        │  [입력]                                                               │
-        │  GraphState {                                                        │
-        │    query: "사용자 질문",                                             │
-        │    session_id: "세션ID",                                             │
-        │    chat_history: [이전 대화],                                        │
-        │    retrieved_docs: [],      ← 비어있음                               │
-        │    answer: "",              ← 비어있음                               │
-        │    evidence_indices: []     ← 비어있음                               │
-        │  }                                                                   │
-        │      │                                                               │
-        │      ▼                                                               │
-        │  ┌─────────────────────────────────────────────────────────────┐     │
-        │  │ [N1] retrieve 노드                                          │     │
-        │  │ ─────────────────────────────────────────────────────────── │     │
-        │  │ 입력: query                                                 │     │
-        │  │ 처리: elasticsearch_store.hybrid_search() 호출              │     │
-        │  │ 출력: {"retrieved_docs": [문서1, 문서2, 문서3]}             │     │
-        │  │       ↓ 상태 병합 (기존 상태 + 출력)                        │     │
-        │  └─────────────────────────────────────────────────────────────┘     │
-        │      │                                                               │
-        │      │ edge: "retrieve" → "generate"                                │
-        │      ▼                                                               │
-        │  ┌─────────────────────────────────────────────────────────────┐     │
-        │  │ [N2] generate 노드                                          │     │
-        │  │ ─────────────────────────────────────────────────────────── │     │
-        │  │ 입력: query, retrieved_docs, chat_history                   │     │
-        │  │ 처리: LLM에 프롬프트 + 컨텍스트 전달                        │     │
-        │  │ 출력: {"answer": "LLM이 생성한 답변"}                        │     │
-        │  │       ↓ 상태 병합                                           │     │
-        │  └─────────────────────────────────────────────────────────────┘     │
-        │      │                                                               │
-        │      │ edge: "generate" → "identify_evidence"                       │
-        │      ▼                                                               │
-        │  ┌─────────────────────────────────────────────────────────────┐     │
-        │  │ [N3] identify_evidence 노드                                 │     │
-        │  │ ─────────────────────────────────────────────────────────── │     │
-        │  │ 입력: query, answer, retrieved_docs                         │     │
-        │  │ 처리: 하이브리드 근거 식별 (LLM + 키워드 매칭)              │     │
-        │  │ 출력: {"evidence_indices": [0, 2]}                          │     │
-        │  │       ↓ 상태 병합                                           │     │
-        │  └─────────────────────────────────────────────────────────────┘     │
-        │      │                                                               │
-        │      │ edge: "identify_evidence" → END                              │
-        │      ▼                                                               │
-        │  [최종 출력]                                                          │
-        │  GraphState {                                                        │
-        │    query: "사용자 질문",                                             │
-        │    session_id: "세션ID",                                             │
-        │    chat_history: [이전 대화],                                        │
-        │    retrieved_docs: [문서1, 문서2, 문서3],  ← N1에서 채워짐           │
-        │    answer: "LLM 답변",                     ← N2에서 채워짐           │
-        │    evidence_indices: [0, 2]               ← N3에서 채워짐           │
-        │  }                                                                   │
-        │                                                                      │
-        │  ※ 상태 병합 규칙: 노드 반환값의 키가 기존 상태를 덮어씀             │
-        │  ※ 반환하지 않은 키는 이전 값 유지                                   │
-        └──────────────────────────────────────────────────────────────────────┘
-        """
-        workflow = StateGraph(GraphState)
-
-        # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
-        workflow.add_node("retrieve", self._retrieve_node)
-        workflow.add_node("generate", self._generate_node)
-        workflow.add_node("identify_evidence", self._identify_evidence_node)
-
-        # 진입점 설정: 그래프 실행 시 첫 번째로 실행될 노드
-        workflow.set_entry_point("retrieve")
-
-        # 엣지 연결: 노드 간 순차 실행 순서 정의
-        workflow.add_edge("retrieve", "generate")
-        workflow.add_edge("generate", "identify_evidence")
-        workflow.add_edge("identify_evidence", END)  # END는 그래프 종료 마커
-
-        # 컴파일: 정의된 그래프를 실행 가능한 형태로 변환
-        self._graph = workflow.compile()
-
-    async def _retrieve_node(self, state: GraphState) -> dict[str, Any]:
-        """검색 노드"""
-        query = state.query
-
-        context = await elasticsearch_store.hybrid_search(
-            query=query, k=settings.TOP_K_RESULTS, vector_weight=0.5
+        wf = StateGraph(GraphState)
+        wf.add_node("route_input", self._route_input_node)
+        wf.add_node("build_persona_bundle", self._build_persona_bundle_node)
+        wf.add_node("generate_draft", self._generate_node)
+        wf.add_node("self_critique", self._self_critique_node)
+        wf.add_node("check_sufficiency", self._check_sufficiency_node)
+        wf.add_node("reinforce_retrieve", self._reinforce_retrieve_node)
+        wf.add_node("finalize_response", self._finalize_response_node)
+        wf.add_node("identify_evidence", self._identify_evidence_node)
+        wf.set_entry_point("route_input")
+        wf.add_edge("route_input", "build_persona_bundle")
+        wf.add_edge("build_persona_bundle", "generate_draft")
+        wf.add_edge("generate_draft", "self_critique")
+        wf.add_edge("self_critique", "check_sufficiency")
+        wf.add_conditional_edges(
+            "check_sufficiency",
+            self._route_after_sufficiency,
+            {"reinforce": "reinforce_retrieve", "finalize": "finalize_response"},
         )
+        wf.add_edge("reinforce_retrieve", "generate_draft")
+        wf.add_edge("finalize_response", "identify_evidence")
+        wf.add_edge("identify_evidence", END)
+        self._graph = wf.compile()
 
-        return {"retrieved_docs": context.documents}
+    def _route_after_sufficiency(self, state: GraphState) -> str:
+        return state.next_action
 
-    def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
-        """
-        대화 이력을 LangChain 메시지 형식으로 변환.
+    async def _invoke(self, prompt: Any, data: dict[str, Any]) -> str:
+        return str(await asyncio.to_thread((prompt | self._llm).invoke, data))
 
-        Args:
-            chat_history: Message 객체 리스트 (role, content 포함)
+    def _parse_json(self, text: str) -> dict[str, Any]:
+        m = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL)
+        s = m.group(1) if m else text
+        if not m:
+            o = re.search(r"\{.*\}", text, re.DOTALL)
+            if o:
+                s = o.group(0)
+        try:
+            v = json.loads(s)
+            return v if isinstance(v, dict) else {}
+        except Exception:
+            return {}
 
-        Returns:
-            LangChain 메시지 객체 리스트 (HumanMessage, AIMessage, SystemMessage)
-        """
-        messages = []
-        for msg in chat_history:
-            if msg.role == "user":
-                messages.append(HumanMessage(content=msg.content))
-            elif msg.role == "assistant":
-                messages.append(AIMessage(content=msg.content))
-            else:
-                messages.append(SystemMessage(content=msg.content))
-        return messages  # 버그 수정: return 문 누락되어 있었음
-
-    def _build_context(self, retrieved_docs: list[Document]) -> str:
-        """검색 문서 텍스트 변환"""
-        context_text = "\n\n".join(
+    def _serialize_docs(self, docs: list[Document], limit: int = 500) -> str:
+        return "\n\n".join(
             [
-                f"Document {i + 1}:\n{doc.content}"
-                for i, doc in enumerate(retrieved_docs)
+                f"[인덱스 {i}] [index {i}]\ntitle: {d.metadata.get('title','untitled')}\ndoc_id: {d.doc_id}\ncontent: {d.content[:limit]}"
+                for i, d in enumerate(docs)
             ]
         )
 
-        return context_text
-
-    async def _generate_node(self, state: GraphState) -> dict[str, Any]:
-        """응답 생성 노드"""
-        query = state.query
-        retrieved_docs = state.retrieved_docs
-        chat_history = state.chat_history
-
-        context_text = self._build_context(retrieved_docs)
-
-        if chat_history:
-            messages = self._prepare_messages(chat_history)
-            prompt = self.chat_with_history_prompt
-            input_data = {"context": context_text, "history": messages, "query": query}
-
-        else:
-            prompt = self.chat_prompt
-            input_data = {"context": context_text, "query": query}
-
-        chain = prompt | self._llm
-
-        answer = await asyncio.to_thread(chain.invoke, input_data)
-
-        return {"answer": answer}
-
-    def _extract_keywords(self, text: str, min_length: int = 2) -> set[str]:
-        """텍스트에서 핵심 키워드 추출 (불용어 제거)"""
-        # 한글, 영문, 숫자만 추출
-        tokens = re.findall(r"[가-힣a-zA-Z0-9]+", text)
-        keywords = {
-            token.lower()
-            for token in tokens
-            if len(token) >= min_length and token not in _KOREAN_STOPWORDS
-        }
-        return keywords
+    def _extract_keywords(self, text: str) -> set[str]:
+        t = re.findall(r"[\uac00-\ud7a3a-zA-Z0-9]+", text.lower())
+        return {x for x in t if len(x) >= 2 and x not in _STOPWORDS}
 
     def _calculate_keyword_overlap(
         self, answer: str, doc_content: str
     ) -> tuple[float, set[str]]:
-        """답변과 문서 간 키워드 일치도 계산"""
-        answer_keywords = self._extract_keywords(answer)
-        doc_keywords = self._extract_keywords(doc_content)
-
-        if not answer_keywords:
+        a = self._extract_keywords(answer)
+        d = self._extract_keywords(doc_content)
+        if not a:
             return 0.0, set()
+        m = a & d
+        return len(m) / len(a), m
 
-        matched = answer_keywords & doc_keywords
-        overlap_ratio = len(matched) / len(answer_keywords)
-
-        return overlap_ratio, matched
-
-    def _get_keyword_based_evidence(
-        self,
-        answer: str,
-        retrieved_docs: list[Document],
-        threshold: float = 0.1,
-    ) -> list[tuple[int, float, set[str]]]:
-        """키워드 기반 근거 문서 후보 추출"""
-        candidates = []
-        for idx, doc in enumerate(retrieved_docs):
-            overlap_ratio, matched_keywords = self._calculate_keyword_overlap(
-                answer, doc.content
-            )
-            if overlap_ratio >= threshold:
-                candidates.append((idx, overlap_ratio, matched_keywords))
-
-        # 일치도 높은 순으로 정렬
-        candidates.sort(key=lambda x: x[1], reverse=True)
-        return candidates
-
-    async def _parse_evidence_response(self, response: str) -> list[int]:
-        """LLM 응답 근거 인덱스 파싱"""
-        try:
-            json_match = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(1)
-            else:
-                json_match = re.search(r"\{.*?\}", response, re.DOTALL)
-                if json_match:
-                    json_str = json_match.group(0)
-                else:
-                    json_str = response
-
-            parsed = json.loads(json_str)
-
-            if isinstance(parsed, dict) and "evidence_indices" in parsed:
-                indices = parsed["evidence_indices"]
-                if isinstance(indices, list):
-                    return [int(idx) for idx in indices]
-
-            if isinstance(parsed, list):
-                return [int(idx) for idx in parsed]
-
-            return []
-
-        except (json.JSONDecodeError, ValueError, TypeError) as e:
-            print(f"근거 응답 파싱 오류: {e}")
-            print(f"원본 응답: {response}")
-
-            numbers = re.findall(r"\d+", response)
-            if numbers:
-                return [int(n) for n in numbers]
-
-            return []
-
-    async def _identify_evidence_node(self, state: GraphState) -> dict[str, Any]:
-        """
-        답변 근거 문서 식별 노드 (N3 하이브리드 로직).
-
-        이 노드는 LLM 기반 추론과 키워드 매칭을 결합하여
-        답변의 근거가 된 문서를 정확하게 식별합니다.
-
-        ┌─────────────────────────────────────────────────────────┐
-        │                N3 하이브리드 근거 식별 로직              │
-        ├─────────────────────────────────────────────────────────┤
-        │ 1단계: 키워드 기반 후보 추출                             │
-        │   - 답변과 문서 간 키워드 일치도 계산                    │
-        │   - 불용어 제거 후 핵심 키워드만 비교                    │
-        │   - 임계값(10%) 이상인 문서를 후보로 선정                │
-        │                                                         │
-        │ 2단계: LLM 기반 근거 식별                                │
-        │   - 프롬프트로 LLM에게 근거 문서 인덱스 요청             │
-        │   - JSON 파싱으로 인덱스 추출                            │
-        │                                                         │
-        │ 3단계: 하이브리드 결합                                   │
-        │   - LLM 결과를 기본으로 사용                             │
-        │   - 키워드 일치도 20% 이상 문서 보강 (LLM이 놓친 경우)   │
-        │   - 키워드 일치도 5% 미만 문서 제거 (LLM 환각 방지)      │
-        └─────────────────────────────────────────────────────────┘
-
-        ┌─────────────────────────────────────────────────────────────────────┐
-        │            Adaptive Thresholding (동적 임계값 적응) 설계            │
-        ├─────────────────────────────────────────────────────────────────────┤
-        │                                                                     │
-        │  "왜 하필 5%, 10%, 20%인가?"에 대한 설계 근거:                       │
-        │                                                                     │
-        │  현재 고정 임계값 (Baseline):                                        │
-        │  ┌───────────┬────────────────────────────────────────────────────┐ │
-        │  │ 5% 미만   │ LLM 환각 의심 → 제거                               │ │
-        │  │ 10% 이상  │ 키워드 후보 진입 → 1단계 필터                       │ │
-        │  │ 20% 이상  │ 고신뢰 문서 → LLM 결과 보강                        │ │
-        │  └───────────┴────────────────────────────────────────────────────┘ │
-        │                                                                     │
-        │  동적 적응 확장 방안 (Future Enhancement):                           │
-        │  ─────────────────────────────────────────────────────────────────  │
-        │  1. 답변 길이 기반 조정:                                             │
-        │     - 짧은 답변 (<100자): 키워드 수가 적으므로 임계값 ↓ (3%, 7%, 15%)│
-        │     - 긴 답변 (>500자): 키워드 풍부하므로 임계값 ↑ (7%, 15%, 25%)   │
-        │                                                                     │
-        │     예시 수식:                                                       │
-        │     base_threshold = 0.10                                           │
-        │     length_factor = min(1.5, max(0.5, len(answer) / 300))          │
-        │     adaptive_threshold = base_threshold * length_factor            │
-        │                                                                     │
-        │  2. 검색 스코어 분포 기반 조정:                                       │
-        │     - 문서 간 스코어 분산이 큰 경우: 명확한 구분 → 임계값 ↑          │
-        │     - 문서 간 스코어 분산이 작은 경우: 모호한 경계 → 임계값 ↓        │
-        │                                                                     │
-        │  3. 도메인별 튜닝:                                                   │
-        │     - 전문 용어 밀도가 높은 도메인: 정확 매칭 중요 → 임계값 ↑        │
-        │     - 일상어 기반 도메인: 의미적 매칭 중요 → 임계값 ↓               │
-        │                                                                     │
-        │  ※ 현재는 범용 Baseline으로 고정값 사용                              │
-        │  ※ 실 데이터 분석 후 적응형 로직으로 확장 가능                       │
-        └─────────────────────────────────────────────────────────────────────┘
-
-        Args:
-            state: 현재 그래프 상태 (query, answer, retrieved_docs 포함)
-
-        Returns:
-            Dict with 'evidence_indices': 근거 문서 인덱스 리스트
-        """
-        query = state.query
-        answer = state.answer
-        retrieved_docs = state.retrieved_docs
-
-        if not retrieved_docs:
-            return {"evidence_indices": []}
-
-        # ═══════════════════════════════════════════════════════════════════
-        # [1단계] 키워드 기반 후보 추출
-        # 임계값 10%: 답변 키워드의 10% 이상이 문서에서 발견되면 후보로 선정
-        # → 동적 적응 시 답변 길이에 따라 7%~15% 범위로 조정 가능
-        # ═══════════════════════════════════════════════════════════════════
-        keyword_candidates = self._get_keyword_based_evidence(
-            answer, retrieved_docs, threshold=0.1
-        )
-        keyword_indices = {idx for idx, _, _ in keyword_candidates}
-
-        print(f"[N3] 키워드 기반 후보: {keyword_candidates[:5]}")
-
-        # ========== 2단계: LLM 기반 근거 식별 ==========
-        documents_text = "\n\n".join(
-            [
-                f"[인덱스 {i}]\n"
-                f"제목: {doc.metadata.get('title', '제목 없음')}\n"
-                f"내용: {doc.content[:500]}"
-                for i, doc in enumerate(retrieved_docs)
-            ]
-        )
-
-        prompt = self.get_evidence_prompt
-        chain = prompt | self._llm
-
-        input_data = {
-            "query": query,
-            "answer": answer,
-            "documents": documents_text,
+    async def _route_input_node(self, state: GraphState) -> dict[str, Any]:
+        q = state.query.lower()
+        task, risk, policy, used = "ambiguous", "low", "adaptive", False
+        if any(k in q for k in ("story", "poem", "창작", "소설", "브레인스토밍")):
+            task, policy = "creative", "minimal"
+        elif any(k in q for k in ("hello", "hi", "안녕", "반가워")):
+            task, policy = "conversational", "minimal"
+        elif any(
+            k in q
+            for k in ("medical", "legal", "finance", "의료", "법률", "투자", "세금")
+        ):
+            task, risk, policy = "factual", "high", "forced"
+        elif any(
+            k in q
+            for k in ("fact", "source", "date", "정확", "사실", "근거", "출처", "최신")
+        ):
+            task, policy = "factual", "forced"
+        if task == "ambiguous" and settings.ROUTING_GATE_MODE == "rule_llm_fallback":
+            try:
+                p = self._parse_json(
+                    await self._invoke(self.route_query_prompt, {"query": state.query})
+                )
+                task = (
+                    p.get("task_type", task)
+                    if p.get("task_type")
+                    in {"creative", "conversational", "factual", "ambiguous"}
+                    else task
+                )
+                risk = (
+                    p.get("risk_level", risk)
+                    if p.get("risk_level") in {"low", "high"}
+                    else risk
+                )
+                policy = (
+                    p.get("retrieval_policy", policy)
+                    if p.get("retrieval_policy") in {"minimal", "forced", "adaptive"}
+                    else policy
+                )
+                used = True
+            except Exception:
+                pass
+        return {
+            "route": RouteDecision(
+                task_type=task,
+                risk_level=risk,
+                retrieval_policy=policy,
+                used_llm_fallback=used,
+            ),
+            "max_loops": settings.SELF_RAG_MAX_LOOPS,
         }
 
-        try:
-            result = await asyncio.to_thread(chain.invoke, input_data)
-            llm_indices = await self._parse_evidence_response(result)
-
-            # 유효 범위 필터링 (인덱스 범위 초과 방지)
-            llm_indices = [idx for idx in llm_indices if 0 <= idx < len(retrieved_docs)]
-            print(f"[N3] LLM 선택 인덱스: {llm_indices}")
-
-            # ═══════════════════════════════════════════════════════════════
-            # [3단계] 하이브리드 결합: LLM + 키워드 매칭 교차 검증
-            # ═══════════════════════════════════════════════════════════════
-            final_indices_set = set(llm_indices)
-
-            # ┌─────────────────────────────────────────────────────────────┐
-            # │ 3-1. 보강 임계값 (REINFORCE_THRESHOLD = 20%)                │
-            # │ ─────────────────────────────────────────────────────────── │
-            # │ 목적: LLM이 놓친 고신뢰 문서 복구                            │
-            # │ 근거: 답변 키워드의 20% 이상이 문서에 존재하면               │
-            # │       실제로 참조된 것으로 볼 수 있음                        │
-            # │                                                             │
-            # │ 동적 적응 시:                                                │
-            # │ - 짧은 답변: 15%로 낮춤 (키워드 수가 적어 매칭 어려움)       │
-            # │ - 긴 답변: 25%로 높임 (키워드 풍부해 엄격 기준 적용)         │
-            # └─────────────────────────────────────────────────────────────┘
-            reinforce_threshold = 0.2  # 보강 임계값 (현재 고정, 추후 동적 조정 가능)
-            for idx, overlap_ratio, matched in keyword_candidates:
-                if overlap_ratio >= reinforce_threshold:
-                    if idx not in final_indices_set:
-                        kw_sample = list(matched)[:5]
-                        print(
-                            f"[N3] 키워드 기반 보강: 문서 {idx} "
-                            f"(일치도: {overlap_ratio:.2%}, 키워드: {kw_sample})"
-                        )
-                    final_indices_set.add(idx)
-
-            # ┌─────────────────────────────────────────────────────────────┐
-            # │ 3-2. 제거 임계값 (HALLUCINATION_THRESHOLD = 5%)             │
-            # │ ─────────────────────────────────────────────────────────── │
-            # │ 목적: LLM 환각으로 잘못 선택된 문서 필터링                   │
-            # │ 근거: 키워드 일치도가 5% 미만이면 답변 생성에                │
-            # │       실제로 기여하지 않았을 가능성 높음                     │
-            # │                                                             │
-            # │ 동적 적응 시:                                                │
-            # │ - 전문 용어 도메인: 3%로 낮춤 (정확 매칭 어려움)             │
-            # │ - 일반 도메인: 7%로 높임 (일상어는 매칭 쉬움)                │
-            # │                                                             │
-            # │ 주의: 너무 높이면 정당한 근거 문서도 제거될 수 있음          │
-            # └─────────────────────────────────────────────────────────────┘
-            hallucination_threshold = 0.05  # 환각 제거 임계값
-            for idx in list(final_indices_set):
-                if idx not in keyword_indices:
-                    overlap, _ = self._calculate_keyword_overlap(
-                        answer, retrieved_docs[idx].content
-                    )
-                    if overlap < hallucination_threshold:
-                        print(
-                            f"[N3] 낮은 일치도로 제거: 문서 {idx} "
-                            f"(일치도: {overlap:.2%})"
-                        )
-                        final_indices_set.discard(idx)
-
-            final_indices = sorted(final_indices_set)
-            print(f"[N3] 최종 evidence_indices: {final_indices}")
-
-            return {"evidence_indices": final_indices}
-
-        except Exception as e:
-            print(f"근거 문서 식별 오류: {e}")
-            # Fallback: LLM 실패 시 키워드 기반 결과만 사용
-            fallback_indices = [
-                idx for idx, ratio, _ in keyword_candidates if ratio >= 0.15
+    async def _build_persona_bundle_node(self, state: GraphState) -> dict[str, Any]:
+        profile = await memory_store.get_user_profile(state.session_id)
+        session_summary = " | ".join(
+            [
+                f"{m.role}:{m.content[:80].replace(chr(10),' ')}"
+                for m in state.chat_history[-6:]
             ]
-            return {"evidence_indices": fallback_indices if fallback_indices else [0]}
+        )
+        rq = state.query
+        plan: dict[str, Any] = {}
+        try:
+            p = self._parse_json(
+                await self._invoke(
+                    self.persona_contextual_prompt,
+                    {
+                        "query": state.query,
+                        "profile": json.dumps(profile, ensure_ascii=False),
+                        "session_summary": session_summary,
+                    },
+                )
+            )
+            rq = p.get("rewritten_query") or rq
+            plan = {
+                "source_plan": p.get("source_plan", []),
+                "notes": p.get("notes", ""),
+            }
+        except Exception:
+            pass
+        k = (
+            settings.TOP_K_RESULTS
+            if state.route.retrieval_policy != "minimal"
+            else max(1, min(2, settings.TOP_K_RESULTS))
+        )
+        docs = list(
+            (
+                await elasticsearch_store.hybrid_search(
+                    query=rq, k=k, vector_weight=0.5
+                )
+            ).documents
+        )
+        rerank_notes: list[str] = []
+        if docs:
+            try:
+                p = self._parse_json(
+                    await self._invoke(
+                        self.persona_rerank_prompt,
+                        {
+                            "query": state.query,
+                            "profile": json.dumps(profile, ensure_ascii=False),
+                            "documents": self._serialize_docs(docs, 280),
+                        },
+                    )
+                )
+                idxs = [
+                    i
+                    for i in (p.get("ranked_indices") or [])
+                    if isinstance(i, int) and 0 <= i < len(docs)
+                ]
+                if idxs:
+                    rem = [i for i in range(len(docs)) if i not in set(idxs)]
+                    docs = [docs[i] for i in (idxs + rem)]
+                rerank_notes = [str(n) for n in (p.get("rerank_notes") or [])]
+            except Exception:
+                rerank_notes = ["persona rerank fallback used"]
+        summaries = [
+            {
+                "doc_index": i,
+                "summary": d.content[:180],
+                "citation": d.metadata.get("title", d.doc_id),
+                "confidence": 0.5,
+            }
+            for i, d in enumerate(docs)
+        ]
+        citations = [
+            {
+                "doc_index": i,
+                "citation": s["citation"],
+                "title": docs[i].metadata.get("title", "untitled"),
+            }
+            for i, s in enumerate(summaries)
+        ]
+        bundle = EvidenceBundleE0(
+            top_docs=docs, doc_summaries=summaries, citations_meta=citations
+        )
+        gmp = GlobalMessagePoolM0(
+            profile_snapshot=profile,
+            session_summary=session_summary,
+            retrieval_plan={
+                "original_query": state.query,
+                "rewritten_query": rq,
+                **plan,
+            },
+            rerank_notes=rerank_notes,
+        )
+        return {
+            "retrieved_docs": docs,
+            "persona_bundle": bundle,
+            "global_message_pool": gmp,
+            "last_retrieval_query": rq,
+        }
+
+    def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
+        out: list[Any] = []
+        for m in chat_history:
+            out.append(
+                HumanMessage(content=m.content)
+                if m.role == "user"
+                else (
+                    AIMessage(content=m.content)
+                    if m.role == "assistant"
+                    else SystemMessage(content=m.content)
+                )
+            )
+        return out
+
+    def _build_context(self, docs: list[Document]) -> str:
+        return "\n\n".join(
+            [f"Document {i+1}:\n{d.content}" for i, d in enumerate(docs)]
+        )
+
+    async def _generate_node(self, state: GraphState) -> dict[str, Any]:
+        docs = state.persona_bundle.top_docs or state.retrieved_docs
+        draft = ""
+        try:
+            draft = (
+                await self._invoke(
+                    self.selfrag_draft_prompt,
+                    {
+                        "query": state.query,
+                        "context": self._build_context(docs),
+                        "documents": self._serialize_docs(docs, 420),
+                        "doc_summaries": json.dumps(
+                            state.persona_bundle.doc_summaries, ensure_ascii=False
+                        ),
+                        "global_pool": json.dumps(
+                            state.global_message_pool.model_dump(), ensure_ascii=False
+                        ),
+                    },
+                )
+            ).strip()
+        except Exception:
+            draft = ""
+        if not draft:
+            context = self._build_context(docs)
+            if state.chat_history:
+                draft = str(
+                    await asyncio.to_thread(
+                        (self.chat_with_history_prompt | self._llm).invoke,
+                        {
+                            "context": context,
+                            "history": self._prepare_messages(state.chat_history),
+                            "query": state.query,
+                        },
+                    )
+                ).strip()
+            else:
+                draft = str(
+                    await asyncio.to_thread(
+                        (self.chat_prompt | self._llm).invoke,
+                        {"context": context, "query": state.query},
+                    )
+                ).strip()
+        return {"draft_answer": draft, "answer": draft}
+
+    async def _self_critique_node(self, state: GraphState) -> dict[str, Any]:
+        answer = state.draft_answer or state.answer
+        docs = state.persona_bundle.top_docs or state.retrieved_docs
+        segs = [s.strip() for s in re.split(r"(?<=[.!?])\s+", answer) if s.strip()] or (
+            [answer.strip()] if answer.strip() else []
+        )
+        parsed = {}
+        if segs and docs:
+            try:
+                parsed = self._parse_json(
+                    await self._invoke(
+                        self.selfrag_critique_prompt,
+                        {
+                            "query": state.query,
+                            "draft_answer": answer,
+                            "segments": json.dumps(segs, ensure_ascii=False),
+                            "documents": self._serialize_docs(docs, 420),
+                        },
+                    )
+                )
+            except Exception:
+                parsed = {}
+        rel = [
+            float(x)
+            for x in (parsed.get("rel_scores") or [])
+            if isinstance(x, (int, float))
+        ]
+        if not rel:
+            rel = [
+                min(
+                    1.0,
+                    max(
+                        [self._calculate_keyword_overlap(s, d.content)[0] for d in docs]
+                        or [0.0]
+                    )
+                    * 1.5,
+                )
+                for s in segs
+            ]
+        delta = (
+            settings.SELF_RAG_LOOP0_DELTA
+            if state.strictness_level <= 0
+            else (
+                settings.SELF_RAG_LOOP1_DELTA
+                if state.strictness_level == 1
+                else settings.SELF_RAG_LOOP2_DELTA
+            )
+        )
+        retrieve_decisions = [
+            str(x) for x in (parsed.get("retrieve_decisions") or [])
+        ] or ["Yes" if r < delta else "No" for r in rel]
+        labels = [str(x).lower() for x in (parsed.get("support_labels") or [])]
+        if not labels:
+            labels = [
+                (
+                    "fully"
+                    if r >= max(0.2, delta - 0.15)
+                    else "partial" if r >= 0.08 else "none"
+                )
+                for r in rel
+            ]
+        util = float(parsed.get("utility_score", 0.0) or 0.0)
+        util = max(
+            1.0,
+            min(
+                5.0,
+                util if util > 0 else 1.0 + (sum(rel) / len(rel) if rel else 0.0) * 4.0,
+            ),
+        )
+        n = max(1, len(labels))
+        full = sum(1 for x in labels if x == "fully") / n
+        none = sum(1 for x in labels if x == "none") / n
+        partial_or_no = sum(1 for x in labels if x in {"partial", "none"}) / n
+        avg_rel = sum(rel) / len(rel) if rel else 0.0
+        reasons: list[str] = []
+        if util < settings.MIN_UTILITY:
+            reasons.append("low_utility")
+        if avg_rel < settings.MIN_AVG_REL:
+            reasons.append("low_relevance")
+        if none > settings.MAX_NO_SUPPORT_RATIO:
+            reasons.append("high_no_support_ratio")
+        if partial_or_no > settings.MAX_PARTIAL_OR_NO_RATIO:
+            reasons.append("high_partial_or_no_support_ratio")
+        if (
+            state.route.risk_level == "high"
+            and full < settings.MIN_FULL_SUPPORT_RATIO_HIGH_RISK
+        ):
+            reasons.append("high_risk_low_full_support")
+        if (
+            any(x.lower() == "yes" for x in retrieve_decisions)
+            and state.loop_count < state.max_loops
+        ):
+            reasons.append("needs_additional_retrieval")
+        reasons.extend([str(x) for x in (parsed.get("insufficiency_hints") or [])])
+        reasons = list(dict.fromkeys(reasons))
+        su = [
+            {
+                "full": 1.0 if x == "fully" else 0.0,
+                "partial": 1.0 if x == "partial" else 0.0,
+                "none": 1.0 if x == "none" else 0.0,
+            }
+            for x in labels
+        ]
+        w = (
+            settings.SELF_RAG_LOOP0_WEIGHTS
+            if state.strictness_level <= 0
+            else (
+                settings.SELF_RAG_LOOP1_WEIGHTS
+                if state.strictness_level == 1
+                else settings.SELF_RAG_LOOP2_WEIGHTS
+            )
+        )
+        obj = w[0] * (util / 5.0) + w[1] * full + w[2] * avg_rel
+        score = SelfRagScores(
+            retrieve_decisions=retrieve_decisions,
+            rel_scores=rel,
+            support_scores=su,
+            utility_score=util,
+            avg_isrel=avg_rel,
+            no_support_ratio=none,
+            partial_or_no_support_ratio=partial_or_no,
+            full_support_ratio=full,
+            objective_score=obj,
+            insufficiency_reasons=reasons,
+        )
+        c = list(state.answer_candidates)
+        c.append(
+            {
+                "loop_count": state.loop_count,
+                "answer": answer,
+                "objective_score": obj,
+                "scores": score.model_dump(),
+            }
+        )
+        return {"selfrag_scores": score, "answer_candidates": c}
+
+    async def _check_sufficiency_node(self, state: GraphState) -> dict[str, Any]:
+        insuf = len(state.selfrag_scores.insufficiency_reasons) > 0
+        if insuf and state.loop_count < state.max_loops:
+            return {"is_sufficient": False, "next_action": "reinforce"}
+        return {"is_sufficient": not insuf, "next_action": "finalize"}
+
+    async def _reinforce_retrieve_node(self, state: GraphState) -> dict[str, Any]:
+        rq = state.query
+        try:
+            p = self._parse_json(
+                await self._invoke(
+                    self.selfrag_rewrite_prompt,
+                    {
+                        "query": state.query,
+                        "reasons": json.dumps(
+                            state.selfrag_scores.insufficiency_reasons,
+                            ensure_ascii=False,
+                        ),
+                        "retrieval_plan": json.dumps(
+                            state.global_message_pool.retrieval_plan, ensure_ascii=False
+                        ),
+                    },
+                )
+            )
+            rq = p.get("rewritten_query") or rq
+        except Exception:
+            pass
+        docs = list(
+            (
+                await elasticsearch_store.hybrid_search(
+                    query=rq, k=max(settings.TOP_K_RESULTS + 1, 3), vector_weight=0.5
+                )
+            ).documents
+        )
+        summaries = [
+            {
+                "doc_index": i,
+                "summary": d.content[:180],
+                "citation": d.metadata.get("title", d.doc_id),
+                "confidence": 0.5,
+            }
+            for i, d in enumerate(docs)
+        ]
+        citations = [
+            {
+                "doc_index": i,
+                "citation": s["citation"],
+                "title": docs[i].metadata.get("title", "untitled"),
+            }
+            for i, s in enumerate(summaries)
+        ]
+        loop = state.loop_count + 1
+        strict = min(loop, settings.SELF_RAG_MAX_LOOPS)
+        return {
+            "loop_count": loop,
+            "strictness_level": strict,
+            "retrieved_docs": docs,
+            "persona_bundle": EvidenceBundleE0(
+                top_docs=docs, doc_summaries=summaries, citations_meta=citations
+            ),
+            "global_message_pool": GlobalMessagePoolM0(
+                profile_snapshot=state.global_message_pool.profile_snapshot,
+                session_summary=state.global_message_pool.session_summary,
+                retrieval_plan={
+                    **state.global_message_pool.retrieval_plan,
+                    "reinforced_query": rq,
+                    "reinforce_reasons": state.selfrag_scores.insufficiency_reasons,
+                },
+                rerank_notes=state.global_message_pool.rerank_notes,
+            ),
+            "last_retrieval_query": rq,
+        }
+
+    async def _finalize_response_node(self, state: GraphState) -> dict[str, Any]:
+        ans = state.draft_answer or state.answer
+        if not state.is_sufficient and state.answer_candidates:
+            best = max(
+                state.answer_candidates,
+                key=lambda x: float(x.get("objective_score", 0.0)),
+            )
+            ans = str(best.get("answer", ans)).strip() or ans
+        explain = ""
+        try:
+            explain = await self._invoke(
+                self.transparency_prompt,
+                {
+                    "query": state.query,
+                    "route": json.dumps(state.route.model_dump(), ensure_ascii=False),
+                    "loop_count": state.loop_count,
+                    "reasons": json.dumps(
+                        state.selfrag_scores.insufficiency_reasons, ensure_ascii=False
+                    ),
+                    "rerank_notes": json.dumps(
+                        state.global_message_pool.rerank_notes, ensure_ascii=False
+                    ),
+                },
+            )
+        except Exception:
+            explain = ""
+        if not explain.strip():
+            explain = (
+                f"Personalized retrieval was applied with policy {state.route.retrieval_policy}. "
+                f"Additional retrieval loops: {state.loop_count}. "
+                f"Reasons: {', '.join(state.selfrag_scores.insufficiency_reasons) or 'none'}."
+            )
+        return {
+            "final_answer": ans,
+            "answer": ans,
+            "transparency": {
+                "route": state.route.model_dump(),
+                "loop_count": state.loop_count,
+                "insufficiency_reasons": state.selfrag_scores.insufficiency_reasons,
+                "retrieval_plan": state.global_message_pool.retrieval_plan,
+                "rerank_notes": state.global_message_pool.rerank_notes,
+                "explanation": explain.strip(),
+            },
+        }
+
+    async def _parse_evidence_response(self, response: str) -> list[int]:
+        try:
+            m = re.search(r"```json\s*(.*?)\s*```", response, re.DOTALL)
+            s = (
+                m.group(1)
+                if m
+                else (
+                    re.search(r"\{.*?\}", response, re.DOTALL).group(0)
+                    if re.search(r"\{.*?\}", response, re.DOTALL)
+                    else response
+                )
+            )
+            p = json.loads(s)
+            if isinstance(p, dict) and isinstance(p.get("evidence_indices"), list):
+                return [int(i) for i in p["evidence_indices"]]
+            if isinstance(p, list):
+                return [int(i) for i in p]
+            return []
+        except Exception:
+            return (
+                [int(n) for n in re.findall(r"\d+", response)]
+                if re.findall(r"\d+", response)
+                else []
+            )
+
+    async def _identify_evidence_node(self, state: GraphState) -> dict[str, Any]:
+        docs = state.persona_bundle.top_docs or state.retrieved_docs
+        if not docs:
+            return {"evidence_indices": []}
+        try:
+            r = await asyncio.to_thread(
+                (self.get_evidence_prompt | self._llm).invoke,
+                {
+                    "query": state.query,
+                    "answer": state.final_answer or state.answer,
+                    "documents": self._serialize_docs(docs, 500),
+                },
+            )
+            idx = [
+                i
+                for i in await self._parse_evidence_response(str(r))
+                if 0 <= i < len(docs)
+            ]
+            kws = [
+                (
+                    i,
+                    self._calculate_keyword_overlap(
+                        state.final_answer or state.answer, d.content
+                    )[0],
+                )
+                for i, d in enumerate(docs)
+            ]
+            for i, s in kws:
+                if s >= 0.2:
+                    idx.append(i)
+            idx = sorted(set(idx))
+            if not idx:
+                idx = [i for i, s in kws if s >= 0.15] or [0]
+            return {"evidence_indices": idx, "retrieved_docs": docs}
+        except Exception:
+            return {"evidence_indices": list(range(len(docs))), "retrieved_docs": docs}
 
     def get_graph(self) -> CompiledStateGraph | None:
-        """컴파일된 그래프 반환"""
         return self._graph
 
     async def prepare_state(
         self, query: str, session_id: str, chat_history: list[Message]
     ) -> GraphState:
-        return GraphState(query=query, chat_history=chat_history, session_id=session_id)
+        return GraphState(
+            query=query,
+            chat_history=chat_history,
+            session_id=session_id,
+            max_loops=settings.SELF_RAG_MAX_LOOPS,
+        )
 
     async def close(self) -> None:
-        """리소스 정리 - ElasticsearchStore 연결 종료"""
         try:
             await elasticsearch_store.close()
-        except Exception as e:
-            print(f"[RAGGraph] 리소스 정리 중 오류: {e}")
-        finally:
-            self._initialized = False
+        except Exception:
+            pass
+        self._initialized = False
 
 
 rag_graph = RAGGraph()

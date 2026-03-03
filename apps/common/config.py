@@ -1,23 +1,22 @@
-from pathlib import Path
+﻿from pathlib import Path
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
-# 프로젝트 루트 디렉토리 (.env 파일 위치)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 
 
 class Settings(BaseSettings):
-    """설정값 관리"""
+    """Application settings."""
 
-    # OLLAMA 설정
+    # LLM
     OLLAMA_BASE_URL: str = Field(
         default="https://ollama.nabee.ai.kr/",
         validation_alias=AliasChoices("OLLAMA_BASE_URL", "OLLAMA_HOST"),
     )
     OLLAMA_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16")
 
-    # 엘라스틱서치 설정
+    # Elasticsearch
     ELASTICSEARCH_URL: str = Field(
         default="https://es.nabee.ai.kr/",
         validation_alias=AliasChoices("ELASTICSEARCH_URL", "ES_HOST"),
@@ -34,35 +33,50 @@ class Settings(BaseSettings):
         default="HRo4sn6jiCEt6qSE3uY5xg",
         validation_alias=AliasChoices("ELASTICSEARCH_PASSWORD", "ES_API_KEY"),
     )
+
     EMBEDDING_MODEL: str = Field(default="bge-m3:latest")
     EMBEDDING_DIM: int = Field(
         default=1024,
         validation_alias=AliasChoices("EMBEDDING_DIM", "VEC_DIMS"),
     )
 
-    # 단일성 정체감의 장애 현상은 어떻게 나타나는가?
-    # 벡터스토어 설정
-    # EMBEDDING_MODEL: str = Field(default="")
-    # PERSIST_DIR: str = Field(default="")
-    # COLLECTION_NAME: str = Field(default="notion_documents")
-
-    # API 설정
+    # API
     API_HOST: str = Field(default="0.0.0.0")
-    API_PORT: int = Field(default="8000")
+    API_PORT: int = Field(default=8000)
     MAX_CONCURRENT_REQUESTS: int = Field(default=5)
 
-    # RAG 설정
+    # RAG base
     CHUNK_SIZE: int = Field(default=1000)
     CHUNK_OVERLAP: int = Field(default=200)
     TOP_K_RESULTS: int = Field(default=3)
     MAX_HISTORY_LENGTH: int = Field(default=10)
 
-    # 문서 업로드 설정
+    # PersonaRAG + Self-RAG
+    ROUTING_GATE_MODE: str = Field(default="rule_llm_fallback")
+    SELF_RAG_MAX_LOOPS: int = Field(default=2)
+    SELF_RAG_SEGMENT_MODE: str = Field(default="sentence")
+    SELF_RAG_PROFILE: str = Field(default="balanced")
+
+    MIN_UTILITY: float = Field(default=3.5)
+    MIN_AVG_REL: float = Field(default=0.55)
+    MAX_NO_SUPPORT_RATIO: float = Field(default=0.30)
+    MAX_PARTIAL_OR_NO_RATIO: float = Field(default=0.55)
+    MIN_FULL_SUPPORT_RATIO_HIGH_RISK: float = Field(default=0.75)
+
+    SELF_RAG_LOOP0_WEIGHTS: tuple[float, float, float] = Field(default=(0.4, 0.4, 0.2))
+    SELF_RAG_LOOP1_WEIGHTS: tuple[float, float, float] = Field(default=(0.3, 0.5, 0.2))
+    SELF_RAG_LOOP2_WEIGHTS: tuple[float, float, float] = Field(default=(0.2, 0.6, 0.2))
+
+    SELF_RAG_LOOP0_DELTA: float = Field(default=0.55)
+    SELF_RAG_LOOP1_DELTA: float = Field(default=0.45)
+    SELF_RAG_LOOP2_DELTA: float = Field(default=0.35)
+
+    # Upload
     UPLOAD_DIR: str = Field(default="./uploads")
     MAX_FILE_SIZE: int = Field(default=10 * 1024 * 1024)
-    ALLOWED_EXTENSIONS: list = Field(default=["txt", "pdf", "docx", "md"])
+    ALLOWED_EXTENSIONS: list[str] = Field(default=["txt", "pdf", "docx", "md"])
 
-    # Notion 연동 설정
+    # Notion
     NOTION_TOKEN: str = Field(
         default="ntn_S49134845636QN7OizYlyythCTORUXOCvYcp2U19S0P6dy"
     )

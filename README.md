@@ -1,289 +1,135 @@
-# Multi-turn RAG System
+# RAG Project (LangGraph + PersonaRAG + Self-RAG)
 
-LangGraph 기반 멀티턴 RAG(Retrieval-Augmented Generation) 시스템입니다. Elasticsearch의 하이브리드 검색(Vector + BM25)과 Ollama LLM을 활용하여 한국어 문서에 대한 질의응답을 제공합니다.
+이 프로젝트는 `LangGraph` 기반의 멀티턴 RAG 시스템입니다.  
+핵심 목표는 다음 두 가지입니다.
 
-## 주요 특징
+- `PersonaRAG` 방식으로 사용자 프로필을 반영한 검색/재랭킹
+- `Self-RAG` 방식으로 답변 품질을 자기 비평하고 필요 시 재검색 루프 수행
 
-- **하이브리드 검색**: Vector 유사도 + BM25 키워드 검색 결합
-- **멀티턴 대화**: 세션 기반 대화 이력 관리
-- **Evidence 추적**: N3 노드의 하이브리드 로직으로 답변 근거 문서 식별
-- **비동기 처리**: FastAPI + aiohttp 기반 고성능 비동기 아키텍처
+검색 계층은 `Elasticsearch`(Hybrid: Vector + BM25), 생성 계층은 `Ollama`(EXAONE)를 사용합니다.
 
-## 아키텍처
+## 1. 구현 요약
 
-### N1-N2-N3 파이프라인
+- `route_input`: 질의 성격(creative/conversational/factual)과 위험도(risk)를 판별해 검색 정책 결정
+- `build_persona_bundle`: 세션 프로필 + 최근 대화 요약으로 질의 재작성 및 개인화 재랭킹
+- `generate_draft`: Persona 번들 기반 초안 생성
+- `self_critique`: Self-RAG 점수(관련성/근거성/유용성) 산출
+- `check_sufficiency`: 충분성 판정 후 `reinforce` 또는 `finalize` 분기
+- `reinforce_retrieve`: 불충분 사유를 반영해 재검색 쿼리 생성, 루프 반복
+- `finalize_response`: 후보 답변 중 최적 응답 선택 + 투명성 메타데이터 생성
+- `identify_evidence`: 최종 답변 근거 문서 index 추출
 
-```mermaid
-flowchart LR
-    subgraph Input
-        Q[Query]
-    end
-
-    subgraph N1[N1: Retrieve]
-        ES[Elasticsearch<br/>Hybrid Search]
-    end
-
-    subgraph N2[N2: Generate]
-        LLM[Ollama LLM<br/>답변 생성]
-    end
-
-    subgraph N3[N3: Identify Evidence]
-        EV[LLM + Keyword<br/>하이브리드 검증]
-    end
-
-    subgraph Output
-        A[Answer + Sources]
-    end
-
-    Q --> N1
-    N1 -->|retrieved_docs| N2
-    N2 -->|answer| N3
-    N3 -->|evidence_indices| Output
-```
-
-### 시스템 구조
-
-```mermaid
-flowchart TB
-    subgraph Client
-        REQ[HTTP Request]
-    end
-
-    subgraph API["FastAPI"]
-        ROUTER[Routers]
-        SERVICE[RAGService]
-    end
-
-    subgraph Graph["LangGraph"]
-        N1[retrieve]
-        N2[generate]
-        N3[identify_evidence]
-        N1 --> N2 --> N3
-    end
-
-    subgraph External
-        ES[(Elasticsearch)]
-        OLLAMA[Ollama LLM]
-    end
-
-    REQ --> ROUTER --> SERVICE --> Graph
-    N1 -.-> ES
-    N2 -.-> OLLAMA
-    N3 -.-> OLLAMA
-```
-
-### 하이브리드 검색 Flow
+## 2. LangGraph 워크플로우
 
 ```mermaid
 flowchart LR
-    Q[Query] --> ES[ElasticsearchStore]
-
-    ES --> VS[Vector Search<br/>kNN + cosine]
-    ES --> KS[Keyword Search<br/>BM25]
-
-    VS --> MERGE[Score Normalization<br/>+ Weighted Merge]
-    KS --> MERGE
-
-    MERGE --> TOP[Top-K Documents]
+    A[route_input] --> B[build_persona_bundle]
+    B --> C[generate_draft]
+    C --> D[self_critique]
+    D --> E[check_sufficiency]
+    E -->|reinforce| F[reinforce_retrieve]
+    F --> C
+    E -->|finalize| G[finalize_response]
+    G --> H[identify_evidence]
+    H --> I[END]
 ```
 
-**가중치**: `final_score = (vector_score × 0.5) + (keyword_score × 0.5)`
+구현 위치:
 
-## 설치 방법
+- 그래프 정의: `apps/graphs/rag_graph.py`
+- 실행 서비스: `apps/services/service.py`
+- 상태 모델: `apps/models/state.py`
 
-### 사전 요구사항
+## 3. PersonaRAG + Self-RAG 반영 포인트
 
-- Python 3.11+
-- Elasticsearch 9.x
-- Ollama (또는 원격 Ollama 서버)
+### PersonaRAG 반영
 
-### macOS
+- 사용자 프로필 저장/조회: `apps/stores/memory_store.py`
+- 질의 재작성 프롬프트: `apps/prompts/persona_contextual_retrieval_prompt.py`
+- 개인화 재랭킹 프롬프트: `apps/prompts/persona_rerank_prompt.py`
+- E0 번들(`EvidenceBundleE0`) + M0 풀(`GlobalMessagePoolM0`)을 상태에 유지
+
+### Self-RAG 반영
+
+- 초안 생성: `apps/prompts/selfrag_draft_prompt.py`
+- 자기 비평: `apps/prompts/selfrag_critique_prompt.py`
+- 재검색 질의 재작성: `apps/prompts/selfrag_rewrite_prompt.py`
+- 점수 구조체: `SelfRagScores`  
+  (`utility_score`, `avg_isrel`, `full_support_ratio`, `insufficiency_reasons` 등)
+- loop 기반 강화 검색: `loop_count`, `max_loops`, `strictness_level` 사용
+
+## 4. 논문-구현 매핑
+
+| 논문 아이디어 | 이 프로젝트 구현 |
+|---|---|
+| PersonaRAG: 사용자 중심 검색/응답 개인화 | 세션 프로필 + 대화 요약 기반 질의 재작성/재랭킹 |
+| PersonaRAG: 멀티 에이전트형 역할 분리 | 라우팅/개인화/생성/비평/근거식별 노드로 역할 분리 |
+| Self-RAG: 필요 시점에만 검색 | `route_input` 정책 + `check_sufficiency` 분기 |
+| Self-RAG: 자기 비평 후 개선 | `self_critique` -> `reinforce_retrieve` 루프 |
+| Self-RAG: 근거성/사실성 강화 | support/relevance/utility 점수 + evidence 식별 |
+
+## 5. API
+
+주요 엔드포인트:
+
+- `POST /query`: 동기 질의
+- `POST /query/stream`: SSE 스트리밍 질의
+- `POST /query/feedback`: 명시적 사용자 피드백 저장/프로필 반영
+- `GET /session/{session_id}/profile`: 세션 사용자 프로필 조회
+- `GET /session/{session_id}/history`: 세션 대화 이력 조회
+- `POST /document/add`, `POST /document/upload`: 문서 적재
+- `POST /search/vector|keyword|hybrid`: 검색 API
+
+## 6. 빠른 실행
 
 ```bash
-# 저장소 클론
-git clone https://github.com/your-repo/rag-project.git
+git clone https://github.com/lunnyz3/rag-project.git
 cd rag-project
-git switch notion-analysis
-# 가상환경 생성 및 활성화
 python -m venv .venv
-source .venv/bin/activate
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+# source .venv/bin/activate
 
-# 의존성 설치
 pip install -r requirements.txt
-
-# 환경 변수 설정
 cp .env.sample .env
-# .env 파일을 편집하여 설정값 입력
-
-# 서버 실행
-cd apps && python main.py
+# .env 값 입력 후
+cd apps
+python main.py
 ```
 
-### WSL 2 (Windows)
+서버 실행 후:
+
+- Swagger: `http://localhost:8000/docs`
+
+## 7. 환경 변수
+
+샘플 파일: `.env.sample`
+
+필수 값:
+
+- `ES_HOST`, `ES_INDEX`, `ES_ID`, `ES_API_KEY`
+- `OLLAMA_HOST`, `OLLAMA_MODEL`, `EMBEDDING_MODEL`
+
+주요 튜닝 값:
+
+- `SELF_RAG_MAX_LOOPS`
+- `MIN_UTILITY`, `MIN_AVG_REL`
+- `MAX_NO_SUPPORT_RATIO`, `MAX_PARTIAL_OR_NO_RATIO`
+- `MIN_FULL_SUPPORT_RATIO_HIGH_RISK`
+
+## 8. 테스트
 
 ```bash
-# WSL 2 Ubuntu 환경에서 실행
-sudo apt update && sudo apt install python3.11 python3.11-venv
-
-# 저장소 클론
-git clone https://github.com/your-repo/rag-project.git
-cd rag-project
-git switch notion-analysis
-# 가상환경 생성 및 활성화
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-# 의존성 설치
-pip install -r requirements.txt
-
-# 환경 변수 설정
-cp .env.sample .env
-nano .env  # 설정값 편집
-
-# 서버 실행
-cd apps && python main.py
+pytest tests/test_persona_selfrag_integration.py
+pytest tests/test_search_quality.py
+pytest tests/test_generation_quality.py
+pytest tests/test_evidence_quality.py
 ```
 
-## 환경 변수 설정
+## 9. 참고 논문
 
-`.env` 파일에 다음 설정을 추가하세요:
-
-```env
-# Elasticsearch
-ES_HOST=https://your-elasticsearch-host/
-ES_ID=your-api-key-id
-ES_API_KEY=your-api-key
-ES_INDEX=vector-test-index
-VEC_DIMS=1024
-
-# Ollama
-OLLAMA_HOST=https://your-ollama-host/
-OLLAMA_MODEL=hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16
-EMBEDDING_MODEL=bge-m3:latest
-
-# Notion (선택)
-NOTION_TOKEN=your-notion-token
-NOTION_VERSION=2022-06-28
-```
-
-## 사용 방법
-
-### API 엔드포인트
-
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| POST | `/query` | 질의응답 (동기) |
-| POST | `/query/stream` | 질의응답 (스트리밍) |
-| GET | `/health` | 헬스체크 |
-| POST | `/document/add` | 문서 추가 |
-| POST | `/search` | 검색 |
-
-### 질의 예시
-
-```bash
-curl -X POST http://localhost:8000/query \
-  -H "Content-Type: application/json" \
-  -d '{
-    "query": "단일성 정체감 장애를 가진 사람의 특징은?",
-    "session_id": "test-session",
-    "use_history": false
-  }'
-```
-
-### 응답 예시
-
-```json
-{
-  "session_id": "test-session",
-  "answer": "단일성 정체감 장애 현상은...",
-  "sources": [
-    {
-      "index": 0,
-      "content": "문서 내용...",
-      "metadata": {"page_id": "..."},
-      "is_evidence": true
-    }
-  ],
-  "processing_time": 5.23
-}
-```
-
-## 테스트
-
-### Golden Set 테스트 결과
-
-| 지표 | 결과 |
-|------|------|
-| **Hit Rate** | **100%** (10/10) |
-| **MRR** | **1.0000** |
-| **Evidence 정확도** | **100%** |
-
-### 테스트 실행
-
-```bash
-# 단위 테스트
-pytest tests/
-
-# Golden Set 평가
-python tests/full_evaluation.py
-```
-
-## 프로젝트 구조
-
-```
-rag-project/
-├── apps/
-│   ├── api.py              # FastAPI 앱 진입점
-│   ├── main.py             # 서버 실행
-│   ├── common/
-│   │   └── config.py       # 설정 관리
-│   ├── graphs/
-│   │   └── rag_graph.py    # LangGraph 워크플로우
-│   ├── models/
-│   │   ├── state.py        # GraphState, Document 등
-│   │   ├── request.py      # API 요청 모델
-│   │   └── response.py     # API 응답 모델
-│   ├── prompts/
-│   │   ├── chat_prompt.py
-│   │   └── get_evidence_prompt.py
-│   ├── routers/
-│   │   ├── query.py        # 질의응답 라우터
-│   │   ├── document.py     # 문서 관리
-│   │   └── system.py       # 시스템 헬스체크
-│   ├── services/
-│   │   └── service.py      # RAGService
-│   ├── stores/
-│   │   ├── vector_store.py # Elasticsearch 연동
-│   │   └── memory_store.py # 세션 이력 관리
-│   └── utils/
-│       ├── file_processor.py
-│       └── notion_connector.py
-├── tests/
-│   ├── golden_set.json     # 평가용 질문 세트
-│   ├── final_report.md     # 테스트 리포트
-│   └── user_test_log.md    # API 테스트 로그
-├── .env.sample
-├── .gitignore
-├── requirements.txt
-├── CLAUDE.md               # AI 어시스턴트 지침
-└── README.md
-```
-
-## 기술 스택
-
-| 분류 | 기술                  |
-|------|---------------------|
-| API Framework | FastAPI 0.109.0     |
-| Orchestration | LangGraph 0.0.20    |
-| Search Engine | Elasticsearch 9.1.5 |
-| LLM | Ollama (EXAONE 4.0) |
-| Embedding | bge-m3 (1024차원)     |
-| Data Validation | Pydantic v2         |
-
-## 라이선스
-
-MIT License
-
-## 기여
-
-이슈 및 PR은 언제든 환영합니다.
+- PersonaRAG (2024): `PersonaRAG: Enhancing Retrieval-Augmented Generation Systems with User-Centric Agents`  
+  https://arxiv.org/abs/2407.09394
+- Self-RAG (2023): `SELF-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection`  
+  https://arxiv.org/abs/2310.11511

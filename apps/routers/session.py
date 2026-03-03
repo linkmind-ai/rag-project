@@ -43,6 +43,22 @@ async def get_session_history(session_id: str) -> dict[str, Any]:
         ) from e
 
 
+@router.get("/{session_id}/profile")
+async def get_session_profile(session_id: str) -> dict[str, Any]:
+    """특정 세션 사용자 프로필 조회"""
+    try:
+        profile = await memory_store.get_user_profile(session_id)
+        return {
+            "session_id": session_id,
+            "profile": profile,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"프로필 조회 오류 발생: {e!s}",
+        ) from e
+
+
 @router.delete("/{session_id}")
 async def clear_session(session_id: str) -> dict[str, bool | str]:
     """특정 세션 대화 이력 삭제"""
