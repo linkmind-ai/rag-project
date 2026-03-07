@@ -16,6 +16,7 @@ LangGraph 기반 RAG 워크플로우 모듈.
 - N3: LLM + 키워드 하이브리드 근거 식별
 """
 
+import os
 import asyncio
 import json
 import re
@@ -26,12 +27,19 @@ from common.config import settings
 from common.logger import logger
 from langchain_community.llms import Ollama
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_community.retrievers import TavilySearchAPIRetriever
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+
+from llmlingua import PromptCompressor
+
 from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from prompts.grade_document_prompt import GradeDocuments, _GRADE_PROMPT
+from prompts.query_rewrite_for_web_prompt import _REWRITE_FOR_WEB_SEARCH_PROMPT
 from stores.vector_store import elasticsearch_store
 
 # ========== 한국어 불용어 (Stopwords) ==========
@@ -118,6 +126,8 @@ class CRAGGraph:
         self.chat_prompt = _CHAT_PROMPT
         self.chat_with_history_prompt = _CHAT_WITH_HISTORY_PROMPT
         self.get_evidence_prompt = _GET_EVIDENCE_PROMPT
+        self.grade_document_prompt = _GRADE_PROMPT
+        self.query_rewrite_prompt = _REWRITE_FOR_WEB_SEARCH_PROMPT
 
     async def __aenter__(self) -> "CRAGGraph":
         """
@@ -183,6 +193,17 @@ class CRAGGraph:
                 model=settings.OLLAMA_MODEL,
                 temperature=1.0,
             )
+            self._document_grader = (
+                self.grade_document_prompt
+                | self._llm.with_structured_output(GradeDocuments)
+            )
+            self._query_rewriter = (
+                self.query_rewrite_prompt | self._llm | StrOutputParser()
+            )
+
+            os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
+            self._web_search_tool = TavilySearchAPIRetriever(k=3)
+            self._prompt_compressor = PromptCompressor()
 
             self._build_graph()
             self._initialized = True
@@ -297,21 +318,77 @@ class CRAGGraph:
 
         return {"retrieved_docs": context.documents}
 
-    async def _grade_documents_node(self, state: GraphState) -> dict[str, Any]:
-        """검색된 chunk"""
+    async def _grade_documents_node(self, state: GraphState):
+        """검색된 chunk가 query와 관련이 있는지를 yes 또는 no로 체크"""
+        query = state.query
+        retrieved_docs = state.retrieved_docs
+
+        # 필터링된 문서
+        filtered_docs = []
+
+        for doc in retrieved_docs:
+            # Question - Document 의 관련성 평가
+            input_data = {"document": doc.content, "query": query}
+            score = await asyncio.to_thread(self._document_grader.invoke, input_data)
+
+            if score.binary_score == "yes":
+                filtered_docs.append(doc)
+
+        # 관련 문서가 없으면 웹 검색 수행
+        web_search = len(filtered_docs) == 0
         return {"retrieved_docs": filtered_docs, "web_search": web_search}
 
     async def _query_rewrite_node(self, state: GraphState) -> dict[str, Any]:
         """기존의 쿼리를 웹 검색에 최적화된 쿼리로 재작성"""
+        query = state.query
+
+        # 웹 검색을 위한 질문으로 재작성
+        input_data = {"query": query}
+        query_for_web_search = await asyncio.to_thread(
+            self._query_rewriter.invoke, input_data
+        )
         return {"query_for_web_search": query_for_web_search}
 
     async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
         """refined_question으로 웹 검색"""
-        return {"retrieved_docs": documents}
+        query_for_web_search = state.query_for_web_search
+        retrieved_docs = state.retrieved_docs
+
+        # 웹 검색
+        docs = await asyncio.to_thread(
+            self._web_search_tool.invoke, query_for_web_search
+        )
+
+        # 검색 결과를 문서 형식으로 변환
+        web_results = "\n".join([d.page_content for d in docs])
+        web_results = Document(content=web_results)
+        retrieved_docs.append(web_results)
+
+        return {"retrieved_docs": retrieved_docs}
 
     async def _prompt_compression_node(self, state: GraphState) -> dict[str, Any]:
         """query와 documents를 결합해서 프롬프트 생성 후 LongLLMLingua로 압축"""
-        return {"prompt": prompt}
+        query = state.query
+        retrieved_docs = state.retrieved_docs
+
+        context_text = self._build_context(retrieved_docs)
+
+        results = self._prompt_compressor.compress_prompt(
+            context_text,
+            question=query,
+            ratio=0.55,
+            # Set the special parameter for LongLLMLingua
+            condition_in_question="after_condition",
+            reorder_context="sort",
+            dynamic_context_compression_ratio=0.3,
+            condition_compare=True,
+            context_budget="+100",
+            rank_method="longllmlingua",
+        )
+
+        compressed_prompt = results["compressed_prompt"]
+
+        return {"prompt": compressed_prompt}
 
     def _decide_to_web_search(self, state: GraphState):
         """grade_documents 노드에서 판별한 웹 검색 필요여부에 따라 쿼리를 routing"""
@@ -361,10 +438,8 @@ class CRAGGraph:
     async def _generate_node(self, state: GraphState) -> dict[str, Any]:
         """응답 생성 노드"""
         query = state.query
-        retrieved_docs = state.retrieved_docs
         chat_history = state.chat_history
-
-        context_text = self._build_context(retrieved_docs)
+        context_text = state.prompt
 
         if chat_history:
             messages = self._prepare_messages(chat_history)
