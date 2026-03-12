@@ -40,6 +40,7 @@ from stores.vector_store import elasticsearch_store
 # 핵심 키워드 매칭의 정확도를 높입니다.
 # ==============================================
 _KOREAN_STOPWORDS: set[str] = {
+    # ── 조사 / 격조사 ──────────────────────────────────────────────────────
     "은",
     "는",
     "이",
@@ -62,6 +63,7 @@ _KOREAN_STOPWORDS: set[str] = {
     "보다",
     "라고",
     "하고",
+    # ── 대명사 / 지시어 ────────────────────────────────────────────────────
     "그",
     "저",
     "이것",
@@ -72,12 +74,14 @@ _KOREAN_STOPWORDS: set[str] = {
     "저기",
     "무엇",
     "어디",
+    # ── 기본 동사 / 형용사 ─────────────────────────────────────────────────
     "있다",
     "없다",
     "하다",
     "되다",
     "이다",
     "아니다",
+    # ── 접속사 / 부사 ──────────────────────────────────────────────────────
     "그리고",
     "그러나",
     "하지만",
@@ -90,7 +94,31 @@ _KOREAN_STOPWORDS: set[str] = {
     "통해",
     "대해",
     "관해",
+    # ── 범용 명사 (판별력 낮음, 대부분의 문서에 등장) ─────────────────────
+    # 개선 이유: 이 단어들이 답변·문서 모두에 빈번히 등장해 키워드 overlap
+    # 비율을 인위적으로 높여 3.1 보강 규칙의 False Positive를 유발함.
+    # eval C003·C006·C007 케이스에서 실측 확인 (eval_evidence_hybrid.py).
+    "방법",  # "~하는 방법": 거의 모든 문서에 등장
+    "내용",  # "책의 내용", "~에 대한 내용"
+    "설명",  # "~를 설명"
+    "정보",  # "~에 대한 정보"
+    "기본",  # "기본 개념", "기본 방법"
+    "관련",  # "~에 관련된"
+    "경우",  # "~인 경우"
+    "사용",  # "사용 방법", "~을 사용": 단독 키워드로 사용 시 판별력 없음
+    "기반",  # "~기반 시스템": 매우 빈번한 접미 명사
+    # ── 도서 도메인 특화 불용어 ────────────────────────────────────────────
+    # 도서 RAG 시스템에서 전체 문서에 걸쳐 등장하는 공통어
+    "책",  # 모든 도서 문서에 등장
+    "저자",  # 대부분의 도서 리뷰/요약 문서에 등장
 }
+
+# ── 3.1 보강 최소 키워드 수 임계값 ─────────────────────────────────────────
+# 답변에서 추출된 키워드 수가 이 값 미만이면 3.1 보강 로직을 건너뜁니다.
+# 근거: 키워드가 적을수록 overlap 비율이 극도로 민감해져 FP 급증.
+#       예) 키워드 2개 → 하나만 매칭해도 50% overlap → 3.1 임계값(30%) 초과.
+# 실측: C007(short_answer) 케이스에서 확인 (eval_evidence_hybrid.py).
+_MIN_KEYWORDS_FOR_REINFORCE: int = 4
 
 
 class RAGGraph:
@@ -178,10 +206,18 @@ class RAGGraph:
             if self._initialized:
                 return
 
+            cf_headers: dict[str, str] = {}
+            if settings.CF_ACCESS_CLIENT_ID and settings.CF_ACCESS_CLIENT_SECRET:
+                cf_headers = {
+                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+                }
+
             self._llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.OLLAMA_MODEL,
                 temperature=1.0,
+                headers=cf_headers,
             )
 
             self._build_graph()
@@ -435,8 +471,9 @@ class RAGGraph:
         │                                                         │
         │ 3단계: 하이브리드 결합                                   │
         │   - LLM 결과를 기본으로 사용                             │
-        │   - 키워드 일치도 20% 이상 문서 보강 (LLM이 놓친 경우)   │
-        │   - 키워드 일치도 5% 미만 문서 제거 (LLM 환각 방지)      │
+        │   - 3-1. 키워드 일치도 30% 이상 문서 보강               │
+        │         (단, 답변 키워드 수 < 4이면 스킵)                │
+        │   - 3-2. 키워드 일치도 5% 미만 문서 제거 (환각 방지)     │
         └─────────────────────────────────────────────────────────┘
 
         ┌─────────────────────────────────────────────────────────────────────┐
@@ -445,12 +482,14 @@ class RAGGraph:
         │                                                                     │
         │  "왜 하필 5%, 10%, 20%인가?"에 대한 설계 근거:                       │
         │                                                                     │
-        │  현재 고정 임계값 (Baseline):                                        │
+        │  현재 고정 임계값 (v2, eval_evidence_hybrid.py 실측 기반):             │
         │  ┌───────────┬────────────────────────────────────────────────────┐ │
-        │  │ 5% 미만   │ LLM 환각 의심 → 제거                               │ │
+        │  │ 5% 미만   │ LLM 환각 의심 → 제거 (3-2)                         │ │
         │  │ 10% 이상  │ 키워드 후보 진입 → 1단계 필터                       │ │
-        │  │ 20% 이상  │ 고신뢰 문서 → LLM 결과 보강                        │ │
+        │  │ 30% 이상  │ 고신뢰 문서 → LLM 결과 보강 (3-1, v1의 20%→30%)   │ │
+        │  │ 키워드<4  │ 3-1 보강 스킵 (짧은 답변 FP 방지)                  │ │
         │  └───────────┴────────────────────────────────────────────────────┘ │
+        │  v1→v2 변경 근거: eval C003·C007 FP 케이스에서 실측.               │
         │                                                                     │
         │  동적 적응 확장 방안 (Future Enhancement):                           │
         │  ─────────────────────────────────────────────────────────────────  │
@@ -533,27 +572,38 @@ class RAGGraph:
             final_indices_set = set(llm_indices)
 
             # ┌─────────────────────────────────────────────────────────────┐
-            # │ 3-1. 보강 임계값 (REINFORCE_THRESHOLD = 20%)                │
+            # │ 3-1. 보강 임계값 (REINFORCE_THRESHOLD = 30%)                │
             # │ ─────────────────────────────────────────────────────────── │
             # │ 목적: LLM이 놓친 고신뢰 문서 복구                            │
-            # │ 근거: 답변 키워드의 20% 이상이 문서에 존재하면               │
-            # │       실제로 참조된 것으로 볼 수 있음                        │
             # │                                                             │
-            # │ 동적 적응 시:                                                │
-            # │ - 짧은 답변: 15%로 낮춤 (키워드 수가 적어 매칭 어려움)       │
-            # │ - 긴 답변: 25%로 높임 (키워드 풍부해 엄격 기준 적용)         │
+            # │ v2 변경사항 (v1: 20% → v2: 30%):                           │
+            # │   eval C003(reinforce_fp_common): 도메인 공통어 3개로        │
+            # │   무관 문서가 25% 달성 → 임계값 상향으로 차단               │
+            # │                                                             │
+            # │ 추가 가드: 답변 키워드 수 < _MIN_KEYWORDS_FOR_REINFORCE 시  │
+            # │   3-1 전체 스킵. 키워드가 적으면 단어 하나가 50%+를 차지해  │
+            # │   FP 폭증 (eval C007 단적인 예).                            │
             # └─────────────────────────────────────────────────────────────┘
-            reinforce_threshold = 0.2  # 보강 임계값 (현재 고정, 추후 동적 조정 가능)
-            for idx, overlap_ratio, matched in keyword_candidates:
-                if overlap_ratio >= reinforce_threshold:
-                    if idx not in final_indices_set:
-                        logger.debug(
-                            "[N3] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
-                            idx,
-                            overlap_ratio,
-                            list(matched)[:5],
-                        )
-                    final_indices_set.add(idx)
+            reinforce_threshold = 0.3  # v2: 0.2 → 0.3 (FP 감소)
+            answer_keywords = self._extract_keywords(answer)
+            skip_reinforce = len(answer_keywords) < _MIN_KEYWORDS_FOR_REINFORCE
+            if skip_reinforce:
+                logger.debug(
+                    "[N3] 답변 키워드 부족({})으로 3.1 보강 스킵 (기준: {}개 이상)",
+                    len(answer_keywords),
+                    _MIN_KEYWORDS_FOR_REINFORCE,
+                )
+            else:
+                for idx, overlap_ratio, matched in keyword_candidates:
+                    if overlap_ratio >= reinforce_threshold:
+                        if idx not in final_indices_set:
+                            logger.debug(
+                                "[N3] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
+                                idx,
+                                overlap_ratio,
+                                list(matched)[:5],
+                            )
+                        final_indices_set.add(idx)
 
             # ┌─────────────────────────────────────────────────────────────┐
             # │ 3-2. 제거 임계값 (HALLUCINATION_THRESHOLD = 5%)             │

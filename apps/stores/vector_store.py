@@ -176,6 +176,13 @@ class ElasticsearchStore:
             if self._initialized:
                 return
 
+            ollama_headers: dict[str, str] = {}
+            if settings.CF_ACCESS_CLIENT_ID and settings.CF_ACCESS_CLIENT_SECRET:
+                ollama_headers = {
+                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+                }
+
             if settings.ELASTICSEARCH_PASSWORD:
                 self._es_client = AsyncElasticsearch(
                     [settings.ELASTICSEARCH_URL],
@@ -189,7 +196,9 @@ class ElasticsearchStore:
                 self._es_client = AsyncElasticsearch([settings.ELASTICSEARCH_URL])
 
             self._embeddings = OllamaEmbeddings(
-                base_url=settings.OLLAMA_BASE_URL, model=settings.EMBEDDING_MODEL
+                base_url=settings.OLLAMA_BASE_URL,
+                model=settings.EMBEDDING_MODEL,
+                headers=ollama_headers,
             )
 
             self._text_splitter = RecursiveCharacterTextSplitter(
