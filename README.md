@@ -161,10 +161,22 @@ OLLAMA_HOST=https://your-ollama-host/
 OLLAMA_MODEL=hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16
 EMBEDDING_MODEL=bge-m3:latest
 
+# Cloudflare Access (ollama.nabee.ai.kr 사용 시 필수)
+CF_ACCESS_CLIENT_ID=your-cf-client-id
+CF_ACCESS_CLIENT_SECRET=your-cf-client-secret
+
 # Notion (선택)
 NOTION_TOKEN=your-notion-token
 NOTION_VERSION=2022-06-28
 ```
+
+> **Cloudflare Access 설정**
+>
+> `ollama.nabee.ai.kr`은 Cloudflare Access로 보호되어 있습니다. Service Token을 발급받아 위 두 값을 설정하세요.
+> - `CF_ACCESS_CLIENT_ID`: Cloudflare Zero Trust → Access → Service Tokens에서 발급
+> - `CF_ACCESS_CLIENT_SECRET`: 발급 시 1회만 표시되므로 즉시 저장 필요
+>
+> 설정된 헤더는 **Ollama (LLM + Embeddings)** 요청에만 적용됩니다. Elasticsearch(`es.nabee.ai.kr`)는 Cloudflare Access 대상이 아닙니다.
 
 ## 사용 방법
 

@@ -62,6 +62,14 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = Field(default=10 * 1024 * 1024)
     ALLOWED_EXTENSIONS: list = Field(default=["txt", "pdf", "docx", "md"])
 
+    # Cloudflare Access 설정
+    CF_ACCESS_CLIENT_ID: str = Field(default="")
+    CF_ACCESS_CLIENT_SECRET: str = Field(default="")
+
+    # Groq API 설정 (RAGAS 평가 전용)
+    GROQ_API_KEY: str = Field(default="")
+    GROQ_API_KEY_2: str = Field(default="")
+
     # Notion 연동 설정
     NOTION_TOKEN: str = Field(
         default="ntn_S49134845636QN7OizYlyythCTORUXOCvYcp2U19S0P6dy"
