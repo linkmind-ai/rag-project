@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     CF_ACCESS_CLIENT_ID: str = Field(default="")
     CF_ACCESS_CLIENT_SECRET: str = Field(default="")
 
+    # Groq API 설정 (RAGAS 평가 전용)
+    GROQ_API_KEY: str = Field(default="")
+    GROQ_API_KEY_2: str = Field(default="")
+
     # Notion 연동 설정
     NOTION_TOKEN: str = Field(
         default="ntn_S49134845636QN7OizYlyythCTORUXOCvYcp2U19S0P6dy"

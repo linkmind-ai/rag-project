@@ -1,0 +1,20 @@
+# RAGAS 생성 품질 평가 전용 환경
+#
+# 메인 requirements.txt의 langchain-core<0.2.0 제약과 충돌하므로
+# 별도 가상환경에서 설치해야 합니다.
+#
+# 설치 방법:
+#   python -m venv .venv-eval
+#   source .venv-eval/bin/activate
+#   pip install -r requirements-eval.txt
+
+ragas>=0.2.0
+langchain-groq>=0.1.0
+langchain-ollama>=0.1.0
+langchain-community>=0.2.0
+langchain-core>=0.2.0,<0.3.0
+pydantic-settings>=2.0.0
+elasticsearch[async]>=8.0.0
+python-dotenv
+pytest
+pytest-asyncio

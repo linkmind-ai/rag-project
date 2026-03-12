@@ -66,3 +66,4 @@ dmypy.json
 tmp/
 temp/
 *.tmp
+.venv-eval/
