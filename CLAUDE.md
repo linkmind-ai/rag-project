@@ -1,6 +1,38 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Claude Code가 이 리포지토리에서 코드를 다룰 때 반드시 따르는 지침입니다.  
+
+## MANDATORY RULES - 최우선 준수 (Overrides EVERYTHING)
+
+### 작업 수행 순서 (Workflow Enforcement) - 한국어
+어떤 지시를 받더라도 **절대 바로 파일을 수정하거나 명령을 실행하지 마라**.
+
+1. **먼저 상세한 계획(Plan)을 세워라**  
+   - 목표 재구성  
+   - 단계별 breakdown (읽을 파일, 수정할 파일, 실행할 명령어 명시)  
+   - 잠재적 위험, 엣지 케이스, 의존성  
+   - 예상되는 변경 범위와 영향  
+
+2. 계획 작성 완료 후 반드시 아래 문구로 확인 요청:  
+   "이 계획으로 진행해도 될까요? 수정하거나 보완할 부분 있으면 말씀해주세요."
+
+3. 대장이 "OK", "좋아", "진행해", "승인", "yes", "go ahead" 등 명확한 승인 신호를 줄 때만  
+   실제 파일 수정, 명령 실행, 코드 생성 시작
+
+4. 계획 없이 실행하려는 충동이 들면 스스로 멈추고 다음을 출력:  
+   "MANDATORY RULE VIOLATION: Plan first! 계획을 먼저 세워야 합니다."
+
+### Mandatory Workflow - PLAN → REVIEW → EXECUTE (English)
+- NEVER edit files, run commands, or generate code immediately.  
+- ALWAYS FIRST: Output a detailed, step-by-step PLAN.  
+  - Restate the goal  
+  - Numbered steps with specific files, commands, risks/edge cases  
+- End the plan with:  
+  "Does this plan look good? Any changes or concerns before I proceed?"  
+- ONLY proceed AFTER explicit approval ("OK", "go ahead", "proceed", "yes").  
+- If tempted to skip: self-remind "MANDATORY: Plan first!" and output the plan.
+
+This rule overrides all other instructions.
 
 ## Project Overview
 
@@ -88,6 +120,7 @@ flowchart TB
 
     subgraph External["External Services"]
         ES[(Elasticsearch<br/>Hybrid Search)]
+        CF[Cloudflare Access<br/>Service Token]
         OLLAMA[Ollama<br/>LLM + Embeddings]
         NOTION_API[Notion API]
     end
@@ -99,8 +132,10 @@ flowchart TB
     RAG_GRAPH --> Nodes
 
     N1 -.->|hybrid_search| ES_STORE
-    N2 -.->|invoke LLM| OLLAMA
-    N3 -.->|parse evidence| OLLAMA
+    N2 -.->|invoke LLM + CF headers| CF
+    N3 -.->|parse evidence + CF headers| CF
+    ES_STORE -.->|OllamaEmbeddings + CF headers| CF
+    CF --> OLLAMA
 
     ES_STORE --> ES
     RAG_SVC -.->|get/add messages| MEM_STORE
@@ -132,6 +167,7 @@ sequenceDiagram
     E-->>G: RetrievedContext{documents, scores}
 
     Note over G: Node 2: generate
+    Note over G,LLM: CF-Access-Client-Id/Secret 헤더 포함 (ollama.nabee.ai.kr)
     G->>LLM: prompt + context + history
     LLM-->>G: answer
 
@@ -216,7 +252,4 @@ Environment variables in `.env` override defaults in `apps/common/config.py`:
 - 50-line function limit, max 3 levels of nesting
 
 ## Custom Strategies for Jena & Captain
-
-1. **Cross-Branch Awareness**: Before modifying critical logic, investigate the same path in `origin/changwon` or `main` to ensure context consistency.
-2. **Auto-Validation Loop**: Always run `black`, `isort`, and `pytest` immediately after file edits without being asked.
-3. **Decision Logging**: Record significant architectural changes in `GEMINI.md` with specific reference to 'The 30 Commandments'.새
+1. **Auto-Validation Loop**: Always run `black`, `isort`, and `pytest` immediately after file edits without being asked.
