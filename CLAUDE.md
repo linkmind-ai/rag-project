@@ -1,38 +1,7 @@
 # CLAUDE.md
 
-Claude Code가 이 리포지토리에서 코드를 다룰 때 반드시 따르는 지침입니다.  
-
-## MANDATORY RULES - 최우선 준수 (Overrides EVERYTHING)
-
-### 작업 수행 순서 (Workflow Enforcement) - 한국어
-어떤 지시를 받더라도 **절대 바로 파일을 수정하거나 명령을 실행하지 마라**.
-
-1. **먼저 상세한 계획(Plan)을 세워라**  
-   - 목표 재구성  
-   - 단계별 breakdown (읽을 파일, 수정할 파일, 실행할 명령어 명시)  
-   - 잠재적 위험, 엣지 케이스, 의존성  
-   - 예상되는 변경 범위와 영향  
-
-2. 계획 작성 완료 후 반드시 아래 문구로 확인 요청:  
-   "이 계획으로 진행해도 될까요? 수정하거나 보완할 부분 있으면 말씀해주세요."
-
-3. 대장이 "OK", "좋아", "진행해", "승인", "yes", "go ahead" 등 명확한 승인 신호를 줄 때만  
-   실제 파일 수정, 명령 실행, 코드 생성 시작
-
-4. 계획 없이 실행하려는 충동이 들면 스스로 멈추고 다음을 출력:  
-   "MANDATORY RULE VIOLATION: Plan first! 계획을 먼저 세워야 합니다."
-
-### Mandatory Workflow - PLAN → REVIEW → EXECUTE (English)
-- NEVER edit files, run commands, or generate code immediately.  
-- ALWAYS FIRST: Output a detailed, step-by-step PLAN.  
-  - Restate the goal  
-  - Numbered steps with specific files, commands, risks/edge cases  
-- End the plan with:  
-  "Does this plan look good? Any changes or concerns before I proceed?"  
-- ONLY proceed AFTER explicit approval ("OK", "go ahead", "proceed", "yes").  
-- If tempted to skip: self-remind "MANDATORY: Plan first!" and output the plan.
-
-This rule overrides all other instructions.
+> 범용 규칙(Plan→Review→Execute, Auto-Validation 등)은 **AGENT.md**를 따릅니다.
+> 이 파일은 **프로젝트 전용** 아키텍처·설정·코딩 표준을 정의합니다.
 
 ## Project Overview
 
@@ -54,15 +23,6 @@ pip install -r requirements.txt
 black <file>
 isort <file>
 ```
-## Core Instructions (The Constitution)
-
-Claude, 당신은 이 프로젝트의 모든 작업에서 아래 두 파일을 **'헌법'**으로 간주해야 합니다.
-
-1. **상시 준수 사항**: `.junie/guidelines.md` (특히 Section 8. The 30 Commandments)
-   - 모든 코드 생성/수정 시 이 30개 규칙을 자동으로 체크하고 위반 시 스스로 교정하십시오.
-2. **리뷰 모드**: `.junie/reviewer_role.md`
-   - `/review` 명령어 실행 시나 리뷰 요청 시, 이 파일에 정의된 페르소나와 Scoring 체계를 적용하여 JSON 포맷으로 보고하십시오.
-
 ## Code Standards & Safety (Priority)
 
 - **Strict Type Safety**: 모든 함수에 Type Hint 필수 (Pydantic v2 준수).
@@ -251,5 +211,3 @@ Environment variables in `.env` override defaults in `apps/common/config.py`:
 - Bulk processing for DB operations (avoid N+1 queries)
 - 50-line function limit, max 3 levels of nesting
 
-## Custom Strategies for Jena & Captain
-1. **Auto-Validation Loop**: Always run `black`, `isort`, and `pytest` immediately after file edits without being asked.
