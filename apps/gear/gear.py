@@ -45,11 +45,14 @@ class GearRetriever:
         self._llm = Ollama(
             base_url=settings.OLLAMA_BASE_URL,
             model=settings.OLLAMA_MODEL,
+            headers=settings.get_ollama_headers(),
             temperature=1.0,
         )
 
         self._embeddings = OllamaEmbeddings(
-            base_url=settings.OLLAMA_BASE_URL, model=settings.EMBEDDING_MODEL
+            base_url=settings.OLLAMA_BASE_URL,
+            model=settings.EMBEDDING_MODEL,
+            headers=settings.get_ollama_headers(),
         )
 
         await self._extract_initial_triples()

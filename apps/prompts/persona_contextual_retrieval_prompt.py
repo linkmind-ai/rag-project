@@ -1,24 +1,21 @@
-﻿from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 
 _PERSONA_CONTEXTUAL_RETRIEVAL_PROMPT = ChatPromptTemplate.from_template("""
-You are the Contextual Retrieval Agent.
-Given query, user profile, and session context, create a retrieval plan.
-Return JSON only.
+You are a search technology expert guiding the Contextual Retrieval Agent to deliver context-aware document retrieval.
 
-Output schema:
-{"rewritten_query":"...","source_plan":["...","..."],"notes":"..."}
-
-Guidelines:
-- Preserve user intent.
-- Add missing entities, dates, definitions only when needed.
-- Keep rewritten query concise and searchable.
-
-User query:
+Question:
 {query}
 
-User profile:
-{profile}
+Passages:
+{passages}
 
-Session summary:
-{session_summary}
+Global Memory:
+{global_memory}
+
+Task Description:
+Using the current question, the provided passages, and the summarized context from Global Memory, identify all information relevant to retrieving the most useful supporting documents. Focus on the user's evolving needs and contextual preferences.
+
+Return JSON only.
+Output schema:
+{"rewritten_query":"...","source_plan":["...","..."],"notes":"..."}
 """)

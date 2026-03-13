@@ -17,7 +17,6 @@ from models.state import (
     GlobalMessagePoolM0,
     GraphState,
     Message,
-    RouteDecision,
     SelfRagScores,
 )
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
@@ -27,7 +26,6 @@ from prompts.persona_contextual_retrieval_prompt import (
     _PERSONA_CONTEXTUAL_RETRIEVAL_PROMPT,
 )
 from prompts.persona_rerank_prompt import _PERSONA_RERANK_PROMPT
-from prompts.route_query_prompt import _ROUTE_QUERY_PROMPT
 from prompts.selfrag_critique_prompt import _SELFRAG_CRITIQUE_PROMPT
 from prompts.selfrag_draft_prompt import _SELFRAG_DRAFT_PROMPT
 from prompts.selfrag_rewrite_prompt import _SELFRAG_REWRITE_PROMPT
@@ -47,7 +45,6 @@ class RAGGraph:
         self.chat_prompt = _CHAT_PROMPT
         self.chat_with_history_prompt = _CHAT_WITH_HISTORY_PROMPT
         self.get_evidence_prompt = _GET_EVIDENCE_PROMPT
-        self.route_query_prompt = _ROUTE_QUERY_PROMPT
         self.persona_contextual_prompt = _PERSONA_CONTEXTUAL_RETRIEVAL_PROMPT
         self.persona_rerank_prompt = _PERSONA_RERANK_PROMPT
         self.selfrag_draft_prompt = _SELFRAG_DRAFT_PROMPT
@@ -76,6 +73,7 @@ class RAGGraph:
             self._llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.OLLAMA_MODEL,
+                headers=settings.get_ollama_headers(),
                 temperature=0.4,
             )
             self._build_graph()
@@ -83,7 +81,6 @@ class RAGGraph:
 
     def _build_graph(self) -> None:
         wf = StateGraph(GraphState)
-        wf.add_node("route_input", self._route_input_node)
         wf.add_node("build_persona_bundle", self._build_persona_bundle_node)
         wf.add_node("generate_draft", self._generate_node)
         wf.add_node("self_critique", self._self_critique_node)
@@ -91,8 +88,7 @@ class RAGGraph:
         wf.add_node("reinforce_retrieve", self._reinforce_retrieve_node)
         wf.add_node("finalize_response", self._finalize_response_node)
         wf.add_node("identify_evidence", self._identify_evidence_node)
-        wf.set_entry_point("route_input")
-        wf.add_edge("route_input", "build_persona_bundle")
+        wf.set_entry_point("build_persona_bundle")
         wf.add_edge("build_persona_bundle", "generate_draft")
         wf.add_edge("generate_draft", "self_critique")
         wf.add_edge("self_critique", "check_sufficiency")
@@ -147,56 +143,33 @@ class RAGGraph:
         m = a & d
         return len(m) / len(a), m
 
-    async def _route_input_node(self, state: GraphState) -> dict[str, Any]:
-        q = state.query.lower()
-        task, risk, policy, used = "ambiguous", "low", "adaptive", False
-        if any(k in q for k in ("story", "poem", "창작", "소설", "브레인스토밍")):
-            task, policy = "creative", "minimal"
-        elif any(k in q for k in ("hello", "hi", "안녕", "반가워")):
-            task, policy = "conversational", "minimal"
-        elif any(
-            k in q
-            for k in ("medical", "legal", "finance", "의료", "법률", "투자", "세금")
-        ):
-            task, risk, policy = "factual", "high", "forced"
-        elif any(
-            k in q
-            for k in ("fact", "source", "date", "정확", "사실", "근거", "출처", "최신")
-        ):
-            task, policy = "factual", "forced"
-        if task == "ambiguous" and settings.ROUTING_GATE_MODE == "rule_llm_fallback":
-            try:
-                p = self._parse_json(
-                    await self._invoke(self.route_query_prompt, {"query": state.query})
-                )
-                task = (
-                    p.get("task_type", task)
-                    if p.get("task_type")
-                    in {"creative", "conversational", "factual", "ambiguous"}
-                    else task
-                )
-                risk = (
-                    p.get("risk_level", risk)
-                    if p.get("risk_level") in {"low", "high"}
-                    else risk
-                )
-                policy = (
-                    p.get("retrieval_policy", policy)
-                    if p.get("retrieval_policy") in {"minimal", "forced", "adaptive"}
-                    else policy
-                )
-                used = True
-            except Exception:
-                pass
-        return {
-            "route": RouteDecision(
-                task_type=task,
-                risk_level=risk,
-                retrieval_policy=policy,
-                used_llm_fallback=used,
-            ),
-            "max_loops": settings.SELF_RAG_MAX_LOOPS,
-        }
+    def _normalize_retrieve_decision(self, value: Any) -> str:
+        text = str(value).strip().lower()
+        if "no retrieval" in text or text == "no":
+            return "No"
+        if "continue" in text:
+            return "Continue"
+        if "retrieval" in text or text == "yes":
+            return "Yes"
+        return "No"
+
+    def _normalize_support_label(self, value: Any) -> str:
+        text = str(value).strip().lower()
+        if "fully" in text:
+            return "fully"
+        if "partial" in text:
+            return "partial"
+        if "no support" in text or text == "none":
+            return "none"
+        return text
+
+    def _normalize_relevance_label(self, value: Any) -> float:
+        text = str(value).strip().lower()
+        if "relevant" in text and "irrelevant" not in text:
+            return 1.0
+        if "irrelevant" in text:
+            return 0.0
+        return 0.0
 
     async def _build_persona_bundle_node(self, state: GraphState) -> dict[str, Any]:
         profile = await memory_store.get_user_profile(state.session_id)
@@ -214,8 +187,14 @@ class RAGGraph:
                     self.persona_contextual_prompt,
                     {
                         "query": state.query,
-                        "profile": json.dumps(profile, ensure_ascii=False),
-                        "session_summary": session_summary,
+                        "passages": session_summary or "No prior passages available.",
+                        "global_memory": json.dumps(
+                            {
+                                "profile_snapshot": profile,
+                                "session_summary": session_summary,
+                            },
+                            ensure_ascii=False,
+                        ),
                     },
                 )
             )
@@ -226,11 +205,7 @@ class RAGGraph:
             }
         except Exception:
             pass
-        k = (
-            settings.TOP_K_RESULTS
-            if state.route.retrieval_policy != "minimal"
-            else max(1, min(2, settings.TOP_K_RESULTS))
-        )
+        k = settings.TOP_K_RESULTS
         docs = list(
             (
                 await elasticsearch_store.hybrid_search(
@@ -246,8 +221,19 @@ class RAGGraph:
                         self.persona_rerank_prompt,
                         {
                             "query": state.query,
-                            "profile": json.dumps(profile, ensure_ascii=False),
                             "documents": self._serialize_docs(docs, 280),
+                            "global_memory": json.dumps(
+                                {
+                                    "profile_snapshot": profile,
+                                    "session_summary": session_summary,
+                                    "retrieval_plan": {
+                                        "original_query": state.query,
+                                        "rewritten_query": rq,
+                                        **plan,
+                                    },
+                                },
+                                ensure_ascii=False,
+                            ),
                         },
                     )
                 )
@@ -391,6 +377,11 @@ class RAGGraph:
         ]
         if not rel:
             rel = [
+                self._normalize_relevance_label(x)
+                for x in (parsed.get("relevance_labels") or [])
+            ]
+        if not rel:
+            rel = [
                 min(
                     1.0,
                     max(
@@ -411,9 +402,13 @@ class RAGGraph:
             )
         )
         retrieve_decisions = [
-            str(x) for x in (parsed.get("retrieve_decisions") or [])
+            self._normalize_retrieve_decision(x)
+            for x in (parsed.get("retrieve_decisions") or [])
         ] or ["Yes" if r < delta else "No" for r in rel]
-        labels = [str(x).lower() for x in (parsed.get("support_labels") or [])]
+        labels = [
+            self._normalize_support_label(x)
+            for x in (parsed.get("support_labels") or [])
+        ]
         if not labels:
             labels = [
                 (

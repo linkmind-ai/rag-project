@@ -39,6 +39,7 @@ class RAGGraph:
             self._llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.OLLAMA_MODEL,
+                headers=settings.get_ollama_headers(),
                 temperature=1.0,
             )
 

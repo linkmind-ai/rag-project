@@ -14,6 +14,8 @@ class Settings(BaseSettings):
         default="https://ollama.nabee.ai.kr/",
         validation_alias=AliasChoices("OLLAMA_BASE_URL", "OLLAMA_HOST"),
     )
+    CF_ACCESS_CLIENT_ID: str = Field(default="")
+    CF_ACCESS_CLIENT_SECRET: str = Field(default="")
     OLLAMA_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16")
 
     # Elasticsearch
@@ -86,6 +88,16 @@ class Settings(BaseSettings):
         env_file = str(PROJECT_ROOT / ".env")
         case_sensitive = True
         extra = "ignore"
+
+    def get_ollama_headers(self) -> dict[str, str] | None:
+        """Return Cloudflare Access headers for protected Ollama endpoints."""
+        if not self.CF_ACCESS_CLIENT_ID or not self.CF_ACCESS_CLIENT_SECRET:
+            return None
+
+        return {
+            "CF-Access-Client-Id": self.CF_ACCESS_CLIENT_ID,
+            "CF-Access-Client-Secret": self.CF_ACCESS_CLIENT_SECRET,
+        }
 
 
 settings = Settings()

@@ -21,27 +21,6 @@ def rag_graph() -> RAGGraph:
 
 
 @pytest.mark.asyncio
-async def test_route_creative_query_is_minimal(rag_graph: RAGGraph) -> None:
-    state = GraphState(query="소설 아이디어를 브레인스토밍 해줘", session_id="s1")
-    result = await rag_graph._route_input_node(state)
-    route = result["route"]
-
-    assert route.task_type == "creative"
-    assert route.retrieval_policy == "minimal"
-
-
-@pytest.mark.asyncio
-async def test_route_high_risk_query_forces_retrieval(rag_graph: RAGGraph) -> None:
-    state = GraphState(query="의료 진단 관련 근거를 알려줘", session_id="s2")
-    result = await rag_graph._route_input_node(state)
-    route = result["route"]
-
-    assert route.task_type == "factual"
-    assert route.risk_level == "high"
-    assert route.retrieval_policy == "forced"
-
-
-@pytest.mark.asyncio
 async def test_persona_bundle_builds_e0_and_m0(rag_graph: RAGGraph) -> None:
     docs = [
         Document(content="doc0 content", metadata={"title": "T0"}, doc_id="d0"),
@@ -49,9 +28,9 @@ async def test_persona_bundle_builds_e0_and_m0(rag_graph: RAGGraph) -> None:
     ]
 
     async def fake_invoke(_prompt, data):
-        if "session_summary" in data:
+        if "global_memory" in data and "passages" in data:
             return '{"rewritten_query":"rewritten q","source_plan":["wiki"]}'
-        if "profile" in data and "documents" in data:
+        if "global_memory" in data and "documents" in data:
             return '{"ranked_indices":[1,0],"rerank_notes":["profile boost"]}'
         return "{}"
 
@@ -65,7 +44,6 @@ async def test_persona_bundle_builds_e0_and_m0(rag_graph: RAGGraph) -> None:
         "graphs.rag_graph.elasticsearch_store.hybrid_search", side_effect=fake_search
     ):
         state = GraphState(query="test query", session_id="s3")
-        state.route.retrieval_policy = "forced"
         result = await rag_graph._build_persona_bundle_node(state)
 
     bundle = result["persona_bundle"]
@@ -89,6 +67,33 @@ async def test_check_sufficiency_respects_loop_cap(rag_graph: RAGGraph) -> None:
     state.loop_count = 2
     r2 = await rag_graph._check_sufficiency_node(state)
     assert r2["next_action"] == "finalize"
+
+
+@pytest.mark.asyncio
+async def test_selfrag_critique_accepts_paper_style_labels(rag_graph: RAGGraph) -> None:
+    docs = [Document(content="supported answer evidence", metadata={}, doc_id="1")]
+
+    async def fake_invoke(_prompt, _data):
+        return """
+        {
+          "retrieve_decisions":["[No Retrieval]"],
+          "relevance_labels":["[Relevant]"],
+          "support_labels":["[Fully supported]"],
+          "utility_score": 4
+        }
+        """
+
+    rag_graph._invoke = fake_invoke  # type: ignore[assignment]
+
+    state = GraphState(query="q", session_id="s-critique", retrieved_docs=docs)
+    state.draft_answer = "supported answer"
+
+    result = await rag_graph._self_critique_node(state)
+    scores = result["selfrag_scores"]
+
+    assert scores.retrieve_decisions == ["No"]
+    assert scores.rel_scores == [1.0]
+    assert scores.full_support_ratio == 1.0
 
 
 @pytest.mark.asyncio

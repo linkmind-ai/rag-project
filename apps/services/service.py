@@ -128,18 +128,7 @@ class RAGService:
                 name = event.get("name", "")
                 data = event.get("data", {})
 
-                if event_type == "on_chain_start" and name == "route_input":
-                    yield {"type": "route_start", "message": "Routing input"}
-
-                elif event_type == "on_chain_end" and name == "route_input":
-                    output = data.get("output", {})
-                    route = output.get("route")
-                    if hasattr(route, "model_dump"):
-                        route = route.model_dump()
-                    latest_meta["route"] = route
-                    yield {"type": "route_end", "route": route}
-
-                elif event_type == "on_chain_start" and name == "build_persona_bundle":
+                if event_type == "on_chain_start" and name == "build_persona_bundle":
                     yield {
                         "type": "retrieve_start",
                         "message": "Document retrieval started",

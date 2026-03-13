@@ -181,7 +181,9 @@ class ElasticsearchStore:
                 self._es_client = AsyncElasticsearch([settings.ELASTICSEARCH_URL])
 
             self._embeddings = OllamaEmbeddings(
-                base_url=settings.OLLAMA_BASE_URL, model=settings.EMBEDDING_MODEL
+                base_url=settings.OLLAMA_BASE_URL,
+                model=settings.EMBEDDING_MODEL,
+                headers=settings.get_ollama_headers(),
             )
 
             self._text_splitter = RecursiveCharacterTextSplitter(
