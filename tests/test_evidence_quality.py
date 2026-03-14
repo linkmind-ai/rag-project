@@ -55,9 +55,7 @@ class TestParseEvidenceResponse:
         assert result == [0, 2, 3]
 
     @pytest.mark.asyncio
-    async def test_parse_markdown_codeblock_format(
-        self, rag_graph: RAGGraph
-    ) -> None:
+    async def test_parse_markdown_codeblock_format(self, rag_graph: RAGGraph) -> None:
         """마크다운 코드블록 형식 파싱 테스트
 
         입력: ```json\n{"evidence_indices": [1, 3]}\n```
@@ -200,9 +198,7 @@ class TestIdentifyEvidenceNode:
         assert result["evidence_indices"] == [0, 1]
 
     @pytest.mark.asyncio
-    async def test_identify_evidence_empty_documents(
-        self, rag_graph: RAGGraph
-    ) -> None:
+    async def test_identify_evidence_empty_documents(self, rag_graph: RAGGraph) -> None:
         """빈 문서 목록 처리 테스트"""
         state = self._create_state("질문", "답변", [])
 

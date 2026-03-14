@@ -46,7 +46,6 @@ from typing import Any
 
 from common.logger import logger
 from graphs.rag_graph import rag_graph
-from graphs.corrective_rag_graph import corrective_rag_graph
 from langchain_core.runnables import RunnableConfig
 from stores.memory_store import memory_store
 
@@ -157,7 +156,7 @@ class RAGService:
 
             # 실제 초기화 수행
             logger.debug("[RAGService] 초기화 시작...")
-            await corrective_rag_graph.initialize()
+            await rag_graph.initialize()
             self._initialized = True
             logger.debug("[RAGService] 초기화 완료")
 
@@ -234,11 +233,11 @@ class RAGService:
             )
 
         # 그래프 초기 상태 준비
-        initial_state = await corrective_rag_graph.prepare_state(
+        initial_state = await rag_graph.prepare_state(
             query=query, session_id=session_id, chat_history=chat_history
         )
 
-        graph = corrective_rag_graph.get_graph()
+        graph = rag_graph.get_graph()
 
         # ┌─────────────────────────────────────────────────────────────┐
         # │            Pydantic → Dict 변환 (model_dump) 필요성          │
@@ -380,7 +379,7 @@ class RAGService:
                 )
 
             # 그래프 초기 상태 준비
-            initial_state = await corrective_rag_graph.prepare_state(
+            initial_state = await rag_graph.prepare_state(
                 query=query, session_id=session_id, chat_history=chat_history
             )
 
@@ -394,7 +393,7 @@ class RAGService:
                 }
             )
 
-            graph = corrective_rag_graph.get_graph()
+            graph = rag_graph.get_graph()
 
             # 상태 변수 초기화
             full_response = ""

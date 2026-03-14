@@ -16,6 +16,7 @@ LangGraph 기반 RAG 워크플로우 모듈.
 - N3: LLM + 키워드 하이브리드 근거 식별
 """
 
+import os
 import asyncio
 import json
 import re
@@ -26,12 +27,20 @@ from common.config import settings
 from common.logger import logger
 from langchain_community.llms import Ollama
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain.output_parsers import PydanticOutputParser
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+
+from llmlingua import PromptCompressor
+
 from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from prompts.grade_document_prompt import GradeDocuments, _GRADE_PROMPT
+from prompts.query_rewrite_for_web_prompt import _REWRITE_FOR_WEB_SEARCH_PROMPT
 from stores.vector_store import elasticsearch_store
 
 # ========== 한국어 불용어 (Stopwords) ==========
@@ -40,7 +49,6 @@ from stores.vector_store import elasticsearch_store
 # 핵심 키워드 매칭의 정확도를 높입니다.
 # ==============================================
 _KOREAN_STOPWORDS: set[str] = {
-    # ── 조사 / 격조사 ──────────────────────────────────────────────────────
     "은",
     "는",
     "이",
@@ -63,7 +71,6 @@ _KOREAN_STOPWORDS: set[str] = {
     "보다",
     "라고",
     "하고",
-    # ── 대명사 / 지시어 ────────────────────────────────────────────────────
     "그",
     "저",
     "이것",
@@ -74,14 +81,12 @@ _KOREAN_STOPWORDS: set[str] = {
     "저기",
     "무엇",
     "어디",
-    # ── 기본 동사 / 형용사 ─────────────────────────────────────────────────
     "있다",
     "없다",
     "하다",
     "되다",
     "이다",
     "아니다",
-    # ── 접속사 / 부사 ──────────────────────────────────────────────────────
     "그리고",
     "그러나",
     "하지만",
@@ -94,31 +99,7 @@ _KOREAN_STOPWORDS: set[str] = {
     "통해",
     "대해",
     "관해",
-    # ── 범용 명사 (판별력 낮음, 대부분의 문서에 등장) ─────────────────────
-    # 개선 이유: 이 단어들이 답변·문서 모두에 빈번히 등장해 키워드 overlap
-    # 비율을 인위적으로 높여 3.1 보강 규칙의 False Positive를 유발함.
-    # eval C003·C006·C007 케이스에서 실측 확인 (eval_evidence_hybrid.py).
-    "방법",  # "~하는 방법": 거의 모든 문서에 등장
-    "내용",  # "책의 내용", "~에 대한 내용"
-    "설명",  # "~를 설명"
-    "정보",  # "~에 대한 정보"
-    "기본",  # "기본 개념", "기본 방법"
-    "관련",  # "~에 관련된"
-    "경우",  # "~인 경우"
-    "사용",  # "사용 방법", "~을 사용": 단독 키워드로 사용 시 판별력 없음
-    "기반",  # "~기반 시스템": 매우 빈번한 접미 명사
-    # ── 도서 도메인 특화 불용어 ────────────────────────────────────────────
-    # 도서 RAG 시스템에서 전체 문서에 걸쳐 등장하는 공통어
-    "책",  # 모든 도서 문서에 등장
-    "저자",  # 대부분의 도서 리뷰/요약 문서에 등장
 }
-
-# ── 3.1 보강 최소 키워드 수 임계값 ─────────────────────────────────────────
-# 답변에서 추출된 키워드 수가 이 값 미만이면 3.1 보강 로직을 건너뜁니다.
-# 근거: 키워드가 적을수록 overlap 비율이 극도로 민감해져 FP 급증.
-#       예) 키워드 2개 → 하나만 매칭해도 50% overlap → 3.1 임계값(30%) 초과.
-# 실측: C007(short_answer) 케이스에서 확인 (eval_evidence_hybrid.py).
-_MIN_KEYWORDS_FOR_REINFORCE: int = 4
 
 
 class RAGGraph:
@@ -146,6 +127,8 @@ class RAGGraph:
         self.chat_prompt = _CHAT_PROMPT
         self.chat_with_history_prompt = _CHAT_WITH_HISTORY_PROMPT
         self.get_evidence_prompt = _GET_EVIDENCE_PROMPT
+        self.grade_document_prompt = _GRADE_PROMPT
+        self.query_rewrite_prompt = _REWRITE_FOR_WEB_SEARCH_PROMPT
 
     async def __aenter__(self) -> "RAGGraph":
         """
@@ -154,7 +137,7 @@ class RAGGraph:
         ┌──────────────────────────────────────────────────────────────┐
         │               리소스 생명주기 추적 (Telemetry)               │
         │ ──────────────────────────────────────────────────────────── │
-        │ 진입 시점: async with RAGGraph() as graph:                  │
+        │ 진입 시점: async with CRAGGraph() as graph:                  │
         │ 할당 리소스:                                                 │
         │   - Ollama LLM 인스턴스 (HTTP 연결 포함)                    │
         │   - LangGraph StateGraph 컴파일된 워크플로우                │
@@ -162,11 +145,11 @@ class RAGGraph:
         └──────────────────────────────────────────────────────────────┘
         """
         logger.debug(
-            "[RAGGraph] __aenter__: LLM 및 그래프 초기화 시작 (id={})", id(self)
+            "[CRAGGraph] __aenter__: LLM 및 그래프 초기화 시작 (id={})", id(self)
         )
         await self.initialize()
         logger.info(
-            "[RAGGraph] __aenter__: 초기화 완료 (모델: {})", settings.OLLAMA_MODEL
+            "[CRAGGraph] __aenter__: 초기화 완료 (모델: {})", settings.OLLAMA_MODEL
         )
         return self
 
@@ -190,13 +173,13 @@ class RAGGraph:
         │ 참고: LLM 인스턴스는 stateless하여 별도 종료 불필요         │
         └──────────────────────────────────────────────────────────────┘
         """
-        logger.debug("[RAGGraph] __aexit__: 리소스 정리 시작 (id={})", id(self))
+        logger.debug("[CRAGGraph] __aexit__: 리소스 정리 시작 (id={})", id(self))
         if exc_type:
             logger.warning(
-                "[RAGGraph] __aexit__: 예외 감지 - {}: {}", exc_type.__name__, exc_val
+                "[CRAGGraph] __aexit__: 예외 감지 - {}: {}", exc_type.__name__, exc_val
             )
         await self.close()
-        logger.debug("[RAGGraph] __aexit__: 리소스 정리 완료")
+        logger.debug("[CRAGGraph] __aexit__: 리소스 정리 완료")
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -206,19 +189,25 @@ class RAGGraph:
             if self._initialized:
                 return
 
-            cf_headers: dict[str, str] = {}
-            if settings.CF_ACCESS_CLIENT_ID and settings.CF_ACCESS_CLIENT_SECRET:
-                cf_headers = {
-                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
-                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
-                }
-
             self._llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.OLLAMA_MODEL,
+                headers={
+                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+                },
                 temperature=1.0,
-                headers=cf_headers,
             )
+
+            parser = PydanticOutputParser(pydantic_object=GradeDocuments)
+            self._document_grader = self.grade_document_prompt | self._llm | parser
+            self._query_rewriter = (
+                self.query_rewrite_prompt | self._llm | StrOutputParser()
+            )
+
+            os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
+            self._web_search_tool = TavilySearchResults(max_results=3)
+            self._prompt_compressor = None
 
             self._build_graph()
             self._initialized = True
@@ -293,6 +282,10 @@ class RAGGraph:
 
         # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
         workflow.add_node("retrieve", self._retrieve_node)
+        workflow.add_node("grade_documents", self._grade_documents_node)
+        workflow.add_node("query_rewrite", self._query_rewrite_node)
+        workflow.add_node("search_web", self._web_search_node)
+        workflow.add_node("prompt_compression", self._prompt_compression_node)
         workflow.add_node("generate", self._generate_node)
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
@@ -300,7 +293,19 @@ class RAGGraph:
         workflow.set_entry_point("retrieve")
 
         # 엣지 연결: 노드 간 순차 실행 순서 정의
-        workflow.add_edge("retrieve", "generate")
+        workflow.add_edge("retrieve", "grade_documents")
+        workflow.add_conditional_edges(
+            "grade_documents",
+            self._decide_to_web_search,
+            {
+                "query_rewrite": "query_rewrite",
+                "prompt_compression": "prompt_compression",
+            },
+        )
+        workflow.add_edge("query_rewrite", "search_web")
+        workflow.add_edge("search_web", "prompt_compression")
+        workflow.add_edge("prompt_compression", "generate")
+
         workflow.add_edge("generate", "identify_evidence")
         workflow.add_edge("identify_evidence", END)  # END는 그래프 종료 마커
 
@@ -316,6 +321,95 @@ class RAGGraph:
         )
 
         return {"retrieved_docs": context.documents}
+
+    async def _grade_documents_node(self, state: GraphState):
+        """검색된 chunk가 query와 관련이 있는지를 yes 또는 no로 체크"""
+        query = state.query
+        retrieved_docs = state.retrieved_docs
+
+        # 필터링된 문서
+        filtered_docs = []
+
+        for doc in retrieved_docs:
+            # Question - Document 의 관련성 평가
+            input_data = {"document": doc.content, "query": query}
+            score = await asyncio.to_thread(self._document_grader.invoke, input_data)
+
+            if score.binary_score == "yes":
+                filtered_docs.append(doc)
+
+        # 관련 문서가 없으면 웹 검색 수행
+        web_search = len(filtered_docs) == 0
+        return {"retrieved_docs": filtered_docs, "web_search": web_search}
+
+    async def _query_rewrite_node(self, state: GraphState) -> dict[str, Any]:
+        """기존의 쿼리를 웹 검색에 최적화된 쿼리로 재작성"""
+        query = state.query
+
+        # 웹 검색을 위한 질문으로 재작성
+        input_data = {"query": query}
+        query_for_web_search = await asyncio.to_thread(
+            self._query_rewriter.invoke, input_data
+        )
+        return {"query_for_web_search": query_for_web_search}
+
+    async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
+        """refined_question으로 웹 검색"""
+        query_for_web_search = state.query_for_web_search
+        retrieved_docs = state.retrieved_docs
+
+        # 웹 검색
+        docs = await asyncio.to_thread(
+            self._web_search_tool.invoke, query_for_web_search
+        )
+
+        # 검색 결과를 문서 형식으로 변환
+        web_results = "\n".join([d["content"] for d in docs])
+        web_results = Document(content=web_results)
+        retrieved_docs.append(web_results)
+
+        return {"retrieved_docs": retrieved_docs}
+
+    async def _prompt_compression_node(self, state: GraphState) -> dict[str, Any]:
+        """query와 documents를 결합해서 프롬프트 생성 후 LongLLMLingua로 압축"""
+        query = state.query
+        retrieved_docs = state.retrieved_docs
+
+        if self._prompt_compressor is None:
+            self._prompt_compressor = PromptCompressor("microsoft/phi-2")
+
+        context_text = self._build_context(retrieved_docs)
+
+        results = self._prompt_compressor.compress_prompt(
+            context_text,
+            question=query,
+            ratio=0.55,
+            # Set the special parameter for LongLLMLingua
+            condition_in_question="after_condition",
+            reorder_context="sort",
+            dynamic_context_compression_ratio=0.3,
+            condition_compare=True,
+            context_budget="+100",
+            rank_method="longllmlingua",
+        )
+
+        compressed_prompt = results["compressed_prompt"]
+
+        return {"prompt": compressed_prompt}
+
+    def _decide_to_web_search(self, state: GraphState):
+        """grade_documents 노드에서 판별한 웹 검색 필요여부에 따라 쿼리를 routing"""
+        web_search = state.web_search
+
+        if web_search:
+            # 웹 검색으로 정보 보강이 필요한 경우
+            print("==== [DECISION: QUERY REWRITE FOR WEB SEARCH] ====")
+            # 쿼리 재작성 노드로 라우팅
+            return "query_rewrite"
+        else:
+            # 관련 문서가 존재하므로 답변 생성 단계(generate) 로 진행
+            print("==== [DECISION: GENERATE] ====")
+            return "prompt_compression"
 
     def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
         """
@@ -351,10 +445,8 @@ class RAGGraph:
     async def _generate_node(self, state: GraphState) -> dict[str, Any]:
         """응답 생성 노드"""
         query = state.query
-        retrieved_docs = state.retrieved_docs
         chat_history = state.chat_history
-
-        context_text = self._build_context(retrieved_docs)
+        context_text = state.prompt
 
         if chat_history:
             messages = self._prepare_messages(chat_history)
@@ -471,9 +563,8 @@ class RAGGraph:
         │                                                         │
         │ 3단계: 하이브리드 결합                                   │
         │   - LLM 결과를 기본으로 사용                             │
-        │   - 3-1. 키워드 일치도 30% 이상 문서 보강               │
-        │         (단, 답변 키워드 수 < 4이면 스킵)                │
-        │   - 3-2. 키워드 일치도 5% 미만 문서 제거 (환각 방지)     │
+        │   - 키워드 일치도 20% 이상 문서 보강 (LLM이 놓친 경우)   │
+        │   - 키워드 일치도 5% 미만 문서 제거 (LLM 환각 방지)      │
         └─────────────────────────────────────────────────────────┘
 
         ┌─────────────────────────────────────────────────────────────────────┐
@@ -482,14 +573,12 @@ class RAGGraph:
         │                                                                     │
         │  "왜 하필 5%, 10%, 20%인가?"에 대한 설계 근거:                       │
         │                                                                     │
-        │  현재 고정 임계값 (v2, eval_evidence_hybrid.py 실측 기반):             │
+        │  현재 고정 임계값 (Baseline):                                        │
         │  ┌───────────┬────────────────────────────────────────────────────┐ │
-        │  │ 5% 미만   │ LLM 환각 의심 → 제거 (3-2)                         │ │
+        │  │ 5% 미만   │ LLM 환각 의심 → 제거                               │ │
         │  │ 10% 이상  │ 키워드 후보 진입 → 1단계 필터                       │ │
-        │  │ 30% 이상  │ 고신뢰 문서 → LLM 결과 보강 (3-1, v1의 20%→30%)   │ │
-        │  │ 키워드<4  │ 3-1 보강 스킵 (짧은 답변 FP 방지)                  │ │
+        │  │ 20% 이상  │ 고신뢰 문서 → LLM 결과 보강                        │ │
         │  └───────────┴────────────────────────────────────────────────────┘ │
-        │  v1→v2 변경 근거: eval C003·C007 FP 케이스에서 실측.               │
         │                                                                     │
         │  동적 적응 확장 방안 (Future Enhancement):                           │
         │  ─────────────────────────────────────────────────────────────────  │
@@ -572,38 +661,27 @@ class RAGGraph:
             final_indices_set = set(llm_indices)
 
             # ┌─────────────────────────────────────────────────────────────┐
-            # │ 3-1. 보강 임계값 (REINFORCE_THRESHOLD = 30%)                │
+            # │ 3-1. 보강 임계값 (REINFORCE_THRESHOLD = 20%)                │
             # │ ─────────────────────────────────────────────────────────── │
             # │ 목적: LLM이 놓친 고신뢰 문서 복구                            │
+            # │ 근거: 답변 키워드의 20% 이상이 문서에 존재하면               │
+            # │       실제로 참조된 것으로 볼 수 있음                        │
             # │                                                             │
-            # │ v2 변경사항 (v1: 20% → v2: 30%):                           │
-            # │   eval C003(reinforce_fp_common): 도메인 공통어 3개로        │
-            # │   무관 문서가 25% 달성 → 임계값 상향으로 차단               │
-            # │                                                             │
-            # │ 추가 가드: 답변 키워드 수 < _MIN_KEYWORDS_FOR_REINFORCE 시  │
-            # │   3-1 전체 스킵. 키워드가 적으면 단어 하나가 50%+를 차지해  │
-            # │   FP 폭증 (eval C007 단적인 예).                            │
+            # │ 동적 적응 시:                                                │
+            # │ - 짧은 답변: 15%로 낮춤 (키워드 수가 적어 매칭 어려움)       │
+            # │ - 긴 답변: 25%로 높임 (키워드 풍부해 엄격 기준 적용)         │
             # └─────────────────────────────────────────────────────────────┘
-            reinforce_threshold = 0.3  # v2: 0.2 → 0.3 (FP 감소)
-            answer_keywords = self._extract_keywords(answer)
-            skip_reinforce = len(answer_keywords) < _MIN_KEYWORDS_FOR_REINFORCE
-            if skip_reinforce:
-                logger.debug(
-                    "[N3] 답변 키워드 부족({})으로 3.1 보강 스킵 (기준: {}개 이상)",
-                    len(answer_keywords),
-                    _MIN_KEYWORDS_FOR_REINFORCE,
-                )
-            else:
-                for idx, overlap_ratio, matched in keyword_candidates:
-                    if overlap_ratio >= reinforce_threshold:
-                        if idx not in final_indices_set:
-                            logger.debug(
-                                "[N3] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
-                                idx,
-                                overlap_ratio,
-                                list(matched)[:5],
-                            )
-                        final_indices_set.add(idx)
+            reinforce_threshold = 0.2  # 보강 임계값 (현재 고정, 추후 동적 조정 가능)
+            for idx, overlap_ratio, matched in keyword_candidates:
+                if overlap_ratio >= reinforce_threshold:
+                    if idx not in final_indices_set:
+                        logger.debug(
+                            "[N3] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
+                            idx,
+                            overlap_ratio,
+                            list(matched)[:5],
+                        )
+                    final_indices_set.add(idx)
 
             # ┌─────────────────────────────────────────────────────────────┐
             # │ 3-2. 제거 임계값 (HALLUCINATION_THRESHOLD = 5%)             │
