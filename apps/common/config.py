@@ -77,7 +77,9 @@ class Settings(BaseSettings):
     NOTION_VERSION: str = Field(default="2022-06-28")
 
     # Tavily Search API 설정
-    TAVILY_API_KEY: str
+    TAVILY_API_KEY: str = Field(
+        validation_alias=AliasChoices("TAVILY_API_KEY", "TAVILY_KEY"),
+    )
 
     class Config:
         env_file = str(PROJECT_ROOT / ".env")
