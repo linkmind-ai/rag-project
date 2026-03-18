@@ -22,6 +22,7 @@ import json
 import re
 from types import TracebackType
 from typing import Any
+import uuid
 
 from common.config import settings
 from common.logger import logger
@@ -32,8 +33,6 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain.output_parsers import PydanticOutputParser
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-
-from llmlingua import PromptCompressor
 
 from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
@@ -206,8 +205,8 @@ class RAGGraph:
             )
 
             os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
-            self._web_search_tool = TavilySearchResults(max_results=3)
-            self._prompt_compressor = None
+            self._web_search_tool = TavilySearchResults(max_results=2)
+            # self._prompt_compressor = None
 
             self._build_graph()
             self._initialized = True
@@ -285,7 +284,6 @@ class RAGGraph:
         workflow.add_node("grade_documents", self._grade_documents_node)
         workflow.add_node("query_rewrite", self._query_rewrite_node)
         workflow.add_node("search_web", self._web_search_node)
-        workflow.add_node("prompt_compression", self._prompt_compression_node)
         workflow.add_node("generate", self._generate_node)
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
@@ -299,12 +297,11 @@ class RAGGraph:
             self._decide_to_web_search,
             {
                 "query_rewrite": "query_rewrite",
-                "prompt_compression": "prompt_compression",
+                "generate": "generate",
             },
         )
         workflow.add_edge("query_rewrite", "search_web")
-        workflow.add_edge("search_web", "prompt_compression")
-        workflow.add_edge("prompt_compression", "generate")
+        workflow.add_edge("search_web", "generate")
 
         workflow.add_edge("generate", "identify_evidence")
         workflow.add_edge("identify_evidence", END)  # END는 그래프 종료 마커
@@ -365,37 +362,41 @@ class RAGGraph:
 
         # 검색 결과를 문서 형식으로 변환
         web_results = "\n".join([d["content"] for d in docs])
-        web_results = Document(content=web_results)
-        retrieved_docs.append(web_results)
-
-        return {"retrieved_docs": retrieved_docs}
-
-    async def _prompt_compression_node(self, state: GraphState) -> dict[str, Any]:
-        """query와 documents를 결합해서 프롬프트 생성 후 LongLLMLingua로 압축"""
-        query = state.query
-        retrieved_docs = state.retrieved_docs
-
-        if self._prompt_compressor is None:
-            self._prompt_compressor = PromptCompressor("microsoft/phi-2")
-
-        context_text = self._build_context(retrieved_docs)
-
-        results = self._prompt_compressor.compress_prompt(
-            context_text,
-            question=query,
-            ratio=0.55,
-            # Set the special parameter for LongLLMLingua
-            condition_in_question="after_condition",
-            reorder_context="sort",
-            dynamic_context_compression_ratio=0.3,
-            condition_compare=True,
-            context_budget="+100",
-            rank_method="longllmlingua",
+        web_results = Document(
+            doc_id=f"web_{uuid.uuid4()}",
+            content=web_results,
+            metadata={"source": "web"},
         )
+        new_docs = retrieved_docs + [web_results]
 
-        compressed_prompt = results["compressed_prompt"]
+        return {"retrieved_docs": new_docs}
 
-        return {"prompt": compressed_prompt}
+    # async def _prompt_compression_node(self, state: GraphState) -> dict[str, Any]:
+    #     """query와 documents를 결합해서 프롬프트 생성 후 LongLLMLingua로 압축"""
+    #     query = state.query
+    #     retrieved_docs = state.retrieved_docs
+
+    #     if self._prompt_compressor is None:
+    #         self._prompt_compressor = PromptCompressor("microsoft/phi-2")
+
+    #     context_text = self._build_context(retrieved_docs)
+
+    #     results = self._prompt_compressor.compress_prompt(
+    #         context_text,
+    #         question=query,
+    #         ratio=0.55,
+    #         # Set the special parameter for LongLLMLingua
+    #         condition_in_question="after_condition",
+    #         reorder_context="sort",
+    #         dynamic_context_compression_ratio=0.3,
+    #         condition_compare=True,
+    #         context_budget="+100",
+    #         rank_method="longllmlingua",
+    #     )
+
+    #     compressed_prompt = results["compressed_prompt"]
+
+    #     return {"prompt": compressed_prompt}
 
     def _decide_to_web_search(self, state: GraphState):
         """grade_documents 노드에서 판별한 웹 검색 필요여부에 따라 쿼리를 routing"""
@@ -409,7 +410,7 @@ class RAGGraph:
         else:
             # 관련 문서가 존재하므로 답변 생성 단계(generate) 로 진행
             print("==== [DECISION: GENERATE] ====")
-            return "prompt_compression"
+            return "generate"
 
     def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
         """
@@ -446,7 +447,9 @@ class RAGGraph:
         """응답 생성 노드"""
         query = state.query
         chat_history = state.chat_history
-        context_text = state.prompt
+        retrieved_docs = state.retrieved_docs
+
+        context_text = self._build_context(retrieved_docs)
 
         if chat_history:
             messages = self._prepare_messages(chat_history)
