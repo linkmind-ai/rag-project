@@ -77,7 +77,6 @@ class GraphState(BaseModel):
     )
     web_search: bool = Field(default=False, description="웹 검색 필요 여부")
     query_for_web_search: str = Field(default="", description="웹 검색용 쿼리")
-    prompt: str = Field(default="", description="압축된 사용자 질의와 근거 문서")
     answer: str = Field(default="", description="LLM 응답")
     evidence_indices: list[int] = Field(
         default_factory=list, description="근거 문서 인덱스"
