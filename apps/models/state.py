@@ -72,6 +72,7 @@ class GraphState(BaseModel):
     chat_history: list[Message] = Field(
         default_factory=list, description="이전 대화 이력"
     )
+    hypothetical_doc: str = Field(default="", description="벡터 검색용 가상 문서 쿼리")
     retrieved_docs: list[Document] = Field(
         default_factory=list, description="검색된 문서"
     )

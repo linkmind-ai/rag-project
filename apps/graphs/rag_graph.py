@@ -38,6 +38,7 @@ from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from prompts.hyde_prompt import _HYDE_PROMPT
 from prompts.grade_document_prompt import GradeDocuments, _GRADE_PROMPT
 from prompts.query_rewrite_for_web_prompt import _REWRITE_FOR_WEB_SEARCH_PROMPT
 from stores.vector_store import elasticsearch_store
@@ -125,6 +126,7 @@ class RAGGraph:
         self._lock = asyncio.Lock()
         self.chat_prompt = _CHAT_PROMPT
         self.chat_with_history_prompt = _CHAT_WITH_HISTORY_PROMPT
+        self.hyde_prompt = _HYDE_PROMPT
         self.get_evidence_prompt = _GET_EVIDENCE_PROMPT
         self.grade_document_prompt = _GRADE_PROMPT
         self.query_rewrite_prompt = _REWRITE_FOR_WEB_SEARCH_PROMPT
@@ -197,11 +199,35 @@ class RAGGraph:
                 },
                 temperature=1.0,
             )
+            self._rewriter_llm = Ollama(
+                base_url=settings.OLLAMA_BASE_URL,
+                model=settings.OLLAMA_MODEL,
+                headers={
+                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+                },
+                temperature=0.2,
+            )
+            self._grader_llm = Ollama(
+                base_url=settings.OLLAMA_BASE_URL,
+                model=settings.OLLAMA_MODEL,
+                headers={
+                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+                },
+                temperature=0.0,
+            )
 
-            parser = PydanticOutputParser(pydantic_object=GradeDocuments)
-            self._document_grader = self.grade_document_prompt | self._llm | parser
+            self._hyde_docs_generator = (
+                self.hyde_prompt | self._rewriter_llm | StrOutputParser()
+            )
+            self._document_grader = (
+                self.grade_document_prompt
+                | self._grader_llm
+                | PydanticOutputParser(pydantic_object=GradeDocuments)
+            )
             self._query_rewriter = (
-                self.query_rewrite_prompt | self._llm | StrOutputParser()
+                self.query_rewrite_prompt | self._rewriter_llm | StrOutputParser()
             )
 
             os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
@@ -280,6 +306,7 @@ class RAGGraph:
         workflow = StateGraph(GraphState)
 
         # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
+        workflow.add_node("hyde", self._hyde_node)
         workflow.add_node("retrieve", self._retrieve_node)
         workflow.add_node("grade_documents", self._grade_documents_node)
         workflow.add_node("query_rewrite", self._query_rewrite_node)
@@ -288,9 +315,10 @@ class RAGGraph:
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
         # 진입점 설정: 그래프 실행 시 첫 번째로 실행될 노드
-        workflow.set_entry_point("retrieve")
+        workflow.set_entry_point("hyde")
 
         # 엣지 연결: 노드 간 순차 실행 순서 정의
+        workflow.add_edge("hyde", "retrieve")
         workflow.add_edge("retrieve", "grade_documents")
         workflow.add_conditional_edges(
             "grade_documents",
@@ -309,35 +337,57 @@ class RAGGraph:
         # 컴파일: 정의된 그래프를 실행 가능한 형태로 변환
         self._graph = workflow.compile()
 
+    async def _hyde_node(self, state: GraphState) -> dict[str, Any]:
+        """query에 대한 답변으로 가상 문서를 생성"""
+        query = state.query
+
+        hypothetical_doc = await asyncio.to_thread(
+            self._hyde_docs_generator.invoke, {"query": query}
+        )
+        logger.info(f"[HyDE] hypothetical_doc: {hypothetical_doc}")
+
+        return {"hypothetical_doc": hypothetical_doc}
+
     async def _retrieve_node(self, state: GraphState) -> dict[str, Any]:
         """검색 노드"""
         query = state.query
+        hypothetical_doc = state.hypothetical_doc
+
+        query_for_retrieval = f"{query}\n{hypothetical_doc}"
 
         context = await elasticsearch_store.hybrid_search(
-            query=query, k=settings.TOP_K_RESULTS, vector_weight=0.5
+            query=query_for_retrieval, k=settings.TOP_K_RESULTS, vector_weight=0.5
         )
 
         return {"retrieved_docs": context.documents}
 
-    async def _grade_documents_node(self, state: GraphState):
+    async def _grade_documents_node(self, state: GraphState) -> dict[str, Any]:
         """검색된 chunk가 query와 관련이 있는지를 yes 또는 no로 체크"""
         query = state.query
         retrieved_docs = state.retrieved_docs
 
-        # 필터링된 문서
-        filtered_docs = []
-
-        for doc in retrieved_docs:
-            # Question - Document 의 관련성 평가
+        async def grade_doc(doc: Document):
             input_data = {"document": doc.content, "query": query}
             score = await asyncio.to_thread(self._document_grader.invoke, input_data)
+            return doc, score
 
-            if score.binary_score == "yes":
-                filtered_docs.append(doc)
+        # 병렬 grading 실행
+        tasks = [grade_doc(doc) for doc in retrieved_docs]
+        results = await asyncio.gather(*tasks)
+
+        # 관련 문서 필터링
+        filtered_docs = [doc for doc, score in results if score.binary_score == "yes"]
 
         # 관련 문서가 없으면 웹 검색 수행
         web_search = len(filtered_docs) == 0
-        return {"retrieved_docs": filtered_docs, "web_search": web_search}
+        logger.info(
+            f"[CRAG] web_search={web_search}, filtered_docs={len(filtered_docs)}"
+        )
+
+        return {
+            "retrieved_docs": filtered_docs,
+            "web_search": web_search,
+        }
 
     async def _query_rewrite_node(self, state: GraphState) -> dict[str, Any]:
         """기존의 쿼리를 웹 검색에 최적화된 쿼리로 재작성"""
@@ -348,6 +398,8 @@ class RAGGraph:
         query_for_web_search = await asyncio.to_thread(
             self._query_rewriter.invoke, input_data
         )
+        logger.info(f"query_for_web_search={query_for_web_search}")
+
         return {"query_for_web_search": query_for_web_search}
 
     async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
@@ -403,13 +455,10 @@ class RAGGraph:
         web_search = state.web_search
 
         if web_search:
-            # 웹 검색으로 정보 보강이 필요한 경우
-            print("==== [DECISION: QUERY REWRITE FOR WEB SEARCH] ====")
-            # 쿼리 재작성 노드로 라우팅
+            # 웹 검색으로 정보 보강이 필요한 경우 쿼리 재작성 노드로 라우팅
             return "query_rewrite"
         else:
             # 관련 문서가 존재하므로 답변 생성 단계(generate) 로 진행
-            print("==== [DECISION: GENERATE] ====")
             return "generate"
 
     def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:

@@ -260,6 +260,7 @@ class RAGService:
 
         # 결과 추출
         answer = result["answer"]
+        hypothetical_doc = result.get("hypothetical_doc", "")
         web_search = result.get("web_search", False)
         evidence_indices = result.get("evidence_indices", [])
         retrieved_docs = result.get("retrieved_docs", [])
@@ -285,6 +286,7 @@ class RAGService:
 
         return {
             "answer": answer,
+            "hypothetical_doc": hypothetical_doc,
             "web_search": web_search,
             "evidence_indices": evidence_indices,
             "evidence_docs": evidence_docs,
@@ -444,6 +446,17 @@ class RAGService:
                         "doc_count": len(retrieved_docs),
                     }
 
+                elif event_type == "on_chain_end" and name == "hyde":
+                    data = event.get("data", {})
+                    output = data.get("output", {})
+                    hypothetical_doc = output.get("hypothetical_doc", "")
+
+                    yield {
+                        "type": "hyde_generated",
+                        "message": "HyDE 가상 문서 생성 완료",
+                        "hypothetical_doc": hypothetical_doc,
+                    }
+
                 # [grade_documents 노드] 웹 검색 실행 여부 체크
                 elif event_type == "on_chain_end" and name == "grade_documents":
                     data = event.get("data", {})
@@ -538,6 +551,7 @@ class RAGService:
             # 완료 이벤트 반환
             yield {
                 "type": "done",
+                "hypothetical_doc": hypothetical_doc,
                 "web_search": web_search,
                 "full_response": full_response,
                 "evidence_indices": evidence_indices,
