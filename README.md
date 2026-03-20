@@ -1,135 +1,206 @@
-# RAG Project (LangGraph + PersonaRAG + Self-RAG)
+# RAG Project
 
-이 프로젝트는 `LangGraph` 기반의 멀티턴 RAG 시스템입니다.  
-핵심 목표는 다음 두 가지입니다.
+가볍게 정리한 Persona + Self-RAG 기반 FastAPI RAG 서버입니다.
 
-- `PersonaRAG` 방식으로 사용자 프로필을 반영한 검색/재랭킹
-- `Self-RAG` 방식으로 답변 품질을 자기 비평하고 필요 시 재검색 루프 수행
+현재 구현은 검색과 생성 책임을 분리한 뒤, 필요할 때만 한 번 더 검색하는 흐름에 맞춰져 있습니다.
 
-검색 계층은 `Elasticsearch`(Hybrid: Vector + BM25), 생성 계층은 `Ollama`(EXAONE)를 사용합니다.
+- 검색: Elasticsearch hybrid search
+- 생성/판단: Ollama LLM
+- 오케스트레이션: LangGraph
+- API: FastAPI
 
-## 1. 구현 요약
+## 현재 파이프라인
 
-- `route_input`: 질의 성격(creative/conversational/factual)과 위험도(risk)를 판별해 검색 정책 결정
-- `build_persona_bundle`: 세션 프로필 + 최근 대화 요약으로 질의 재작성 및 개인화 재랭킹
-- `generate_draft`: Persona 번들 기반 초안 생성
-- `self_critique`: Self-RAG 점수(관련성/근거성/유용성) 산출
-- `check_sufficiency`: 충분성 판정 후 `reinforce` 또는 `finalize` 분기
-- `reinforce_retrieve`: 불충분 사유를 반영해 재검색 쿼리 생성, 루프 반복
-- `finalize_response`: 후보 답변 중 최적 응답 선택 + 투명성 메타데이터 생성
-- `identify_evidence`: 최종 답변 근거 문서 index 추출
-
-## 2. LangGraph 워크플로우
+현재 활성 그래프는 아래 3개 노드로만 구성됩니다.
 
 ```mermaid
 flowchart LR
-    A[route_input] --> B[build_persona_bundle]
-    B --> C[generate_draft]
-    C --> D[self_critique]
-    D --> E[check_sufficiency]
-    E -->|reinforce| F[reinforce_retrieve]
-    F --> C
-    E -->|finalize| G[finalize_response]
-    G --> H[identify_evidence]
-    H --> I[END]
+    A[build_persona_bundle] --> B[self_critique]
+    B --> C[check_sufficiency]
+    C -->|retry| A
+    C -->|finalize| D[END]
 ```
 
-구현 위치:
+핵심 흐름:
 
-- 그래프 정의: `apps/graphs/rag_graph.py`
-- 실행 서비스: `apps/services/service.py`
+1. `build_persona_bundle`
+2. `self_critique`
+3. `check_sufficiency`
+4. 필요하면 최대 2회까지 재검색
+
+## 노드 설명
+
+### 1. `build_persona_bundle`
+
+역할:
+
+- 세션 프로필 조회
+- 최근 대화 요약 생성
+- 검색용 `retrieval_query` 생성
+- 생성용 `generation_hints` 생성
+- Elasticsearch hybrid search 실행
+
+중요한 점:
+
+- `retrieval_query`에는 검색에 필요한 정보만 넣습니다.
+- `generation_hints`에는 답변 스타일과 개인화 힌트만 넣습니다.
+- 최근 user 문맥을 검색에 붙일지 여부는 작은 LLM 프롬프트가 판단합니다.
+
+### 2. `self_critique`
+
+역할:
+
+- 검색된 문서만 기반으로 답변 생성
+- 현재 문서가 충분한지 평가
+- 부족하면 더 나은 `next_query` 생성
+
+출력 JSON:
+
+```json
+{
+  "answer": "final answer text",
+  "is_sufficient": true,
+  "utility_score": 4.2,
+  "confidence": 0.81,
+  "insufficiency_reasons": [],
+  "next_query": "better retrieval query if needed"
+}
+```
+
+### 3. `check_sufficiency`
+
+역할:
+
+- `is_sufficient=true`면 종료
+- 아니고 `loop_count < max_loops`면 재검색
+- 아니면 종료
+
+기본 설정:
+
+- `SELF_RAG_MAX_LOOPS=2`
+
+## Persona 반영 방식
+
+현재는 과하지 않은 형태로 persona를 사용합니다.
+
+검색 쪽:
+
+- 최근 user 문맥이 필요한 경우에만 `Recent user context:` 추가
+- 필요한 경우에만 `Topic hints:` 추가
+
+생성 쪽:
+
+- `response_style`
+- `preferred_topics`
+- `explicit_notes`
+
+이 정보들은 `generation_hints`로만 들어가며, 검색 질의를 직접 오염시키지 않도록 분리했습니다.
+
+## LLM 사용 위치
+
+현재 활성 파이프라인에서 LLM은 2군데에서 사용됩니다.
+
+1. `context_attachment_prompt`
+   최근 user 문맥을 검색 질의에 붙일지 판단
+2. `selfrag_critique_prompt`
+   답변 생성 + 충분성 판단 + 다음 검색 질의 제안
+
+## 주요 파일
+
+- 그래프: `apps/graphs/rag_graph.py`
 - 상태 모델: `apps/models/state.py`
+- 서비스 레이어: `apps/services/service.py`
+- 질의 API: `apps/routers/query.py`
+- attach 판단 프롬프트: `apps/prompts/context_attachment_prompt.py`
+- self-rag 프롬프트: `apps/prompts/selfrag_critique_prompt.py`
 
-## 3. PersonaRAG + Self-RAG 반영 포인트
-
-### PersonaRAG 반영
-
-- 사용자 프로필 저장/조회: `apps/stores/memory_store.py`
-- 질의 재작성 프롬프트: `apps/prompts/persona_contextual_retrieval_prompt.py`
-- 개인화 재랭킹 프롬프트: `apps/prompts/persona_rerank_prompt.py`
-- E0 번들(`EvidenceBundleE0`) + M0 풀(`GlobalMessagePoolM0`)을 상태에 유지
-
-### Self-RAG 반영
-
-- 초안 생성: `apps/prompts/selfrag_draft_prompt.py`
-- 자기 비평: `apps/prompts/selfrag_critique_prompt.py`
-- 재검색 질의 재작성: `apps/prompts/selfrag_rewrite_prompt.py`
-- 점수 구조체: `SelfRagScores`  
-  (`utility_score`, `avg_isrel`, `full_support_ratio`, `insufficiency_reasons` 등)
-- loop 기반 강화 검색: `loop_count`, `max_loops`, `strictness_level` 사용
-
-## 4. 논문-구현 매핑
-
-| 논문 아이디어 | 이 프로젝트 구현 |
-|---|---|
-| PersonaRAG: 사용자 중심 검색/응답 개인화 | 세션 프로필 + 대화 요약 기반 질의 재작성/재랭킹 |
-| PersonaRAG: 멀티 에이전트형 역할 분리 | 라우팅/개인화/생성/비평/근거식별 노드로 역할 분리 |
-| Self-RAG: 필요 시점에만 검색 | `route_input` 정책 + `check_sufficiency` 분기 |
-| Self-RAG: 자기 비평 후 개선 | `self_critique` -> `reinforce_retrieve` 루프 |
-| Self-RAG: 근거성/사실성 강화 | support/relevance/utility 점수 + evidence 식별 |
-
-## 5. API
+## API
 
 주요 엔드포인트:
 
-- `POST /query`: 동기 질의
-- `POST /query/stream`: SSE 스트리밍 질의
-- `POST /query/feedback`: 명시적 사용자 피드백 저장/프로필 반영
-- `GET /session/{session_id}/profile`: 세션 사용자 프로필 조회
-- `GET /session/{session_id}/history`: 세션 대화 이력 조회
-- `POST /document/add`, `POST /document/upload`: 문서 적재
-- `POST /search/vector|keyword|hybrid`: 검색 API
+- `POST /query`
+- `POST /query/stream`
+- `POST /query/feedback`
+- `GET /session/{session_id}/profile`
+- `GET /session/{session_id}/history`
+- `POST /document/add`
+- `POST /document/upload`
+- `POST /search/vector`
+- `POST /search/keyword`
+- `POST /search/hybrid`
 
-## 6. 빠른 실행
+## 실행
 
 ```bash
-git clone https://github.com/lunnyz3/rag-project.git
-cd rag-project
 python -m venv .venv
-# Windows
-.venv\Scripts\activate
-# macOS/Linux
-# source .venv/bin/activate
+```
 
+Windows:
+
+```bash
+.venv\Scripts\activate
+```
+
+macOS/Linux:
+
+```bash
+source .venv/bin/activate
+```
+
+설치:
+
+```bash
 pip install -r requirements.txt
-cp .env.sample .env
-# .env 값 입력 후
+```
+
+서버 실행:
+
+```bash
 cd apps
 python main.py
 ```
 
-서버 실행 후:
+Swagger:
 
-- Swagger: `http://localhost:8000/docs`
+- `http://localhost:8000/docs`
 
-## 7. 환경 변수
+## 환경 변수
 
-샘플 파일: `.env.sample`
+주요 설정:
 
-필수 값:
-
-- `ES_HOST`, `ES_INDEX`, `ES_ID`, `ES_API_KEY`
-- `OLLAMA_HOST`, `OLLAMA_MODEL`, `EMBEDDING_MODEL`
-
-주요 튜닝 값:
-
+- `OLLAMA_BASE_URL` 또는 `OLLAMA_HOST`
+- `OLLAMA_MODEL`
+- `EMBEDDING_MODEL`
+- `ELASTICSEARCH_URL` 또는 `ES_HOST`
+- `ELASTICSEARCH_INDEX` 또는 `ES_INDEX`
+- `ELASTICSEARCH_USER` 또는 `ES_ID`
+- `ELASTICSEARCH_PASSWORD` 또는 `ES_API_KEY`
 - `SELF_RAG_MAX_LOOPS`
-- `MIN_UTILITY`, `MIN_AVG_REL`
-- `MAX_NO_SUPPORT_RATIO`, `MAX_PARTIAL_OR_NO_RATIO`
-- `MIN_FULL_SUPPORT_RATIO_HIGH_RISK`
+- `TOP_K_RESULTS`
 
-## 8. 테스트
+샘플 파일:
+
+- `.env.sample`
+
+## 테스트
+
+현재 회귀 확인에 사용한 테스트:
 
 ```bash
-pytest tests/test_persona_selfrag_integration.py
-pytest tests/test_search_quality.py
-pytest tests/test_generation_quality.py
-pytest tests/test_evidence_quality.py
+pytest tests/test_persona_selfrag_integration.py tests/test_query_api.py
 ```
 
-## 9. 참고 논문
+## 현재 설계의 의도
 
-- PersonaRAG (2024): `PersonaRAG: Enhancing Retrieval-Augmented Generation Systems with User-Centric Agents`  
-  https://arxiv.org/abs/2407.09394
-- Self-RAG (2023): `SELF-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection`  
-  https://arxiv.org/abs/2310.11511
+이 프로젝트는 복잡한 multi-agent PersonaRAG를 그대로 구현하기보다, 아래 원칙에 맞춘 현실적인 구조를 목표로 합니다.
+
+- 검색용 정보와 생성용 정보를 분리한다.
+- follow-up 여부는 고정 규칙보다 LLM이 문맥적으로 판단한다.
+- Self-RAG는 가볍게 유지하고, 필요할 때만 재검색한다.
+- 외부 API shape는 안정적으로 유지한다.
+
+## 알려진 한계
+
+- `self_critique` 노드가 아직 답변 생성, 충분성 판단, next query 생성을 함께 담당합니다.
+- `is_sufficient` 분기가 여전히 LLM 판단에 크게 의존합니다.
+- `sources`는 검색된 문서 목록이며, 실제 사용된 근거 문장 추적까지는 하지 않습니다.

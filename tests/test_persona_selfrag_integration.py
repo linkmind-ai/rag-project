@@ -1,4 +1,3 @@
-﻿import asyncio
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -8,7 +7,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
 
 from graphs.rag_graph import RAGGraph
-from models.state import Document, GraphState, RetrievedContext, SelfRagScores
+from models.state import Document, GraphState, Message, RetrievedContext, SelfRagScores
 from stores.memory_store import InMemoryStore
 
 
@@ -21,95 +20,247 @@ def rag_graph() -> RAGGraph:
 
 
 @pytest.mark.asyncio
-async def test_persona_bundle_builds_e0_and_m0(rag_graph: RAGGraph) -> None:
-    docs = [
-        Document(content="doc0 content", metadata={"title": "T0"}, doc_id="d0"),
-        Document(content="doc1 content", metadata={"title": "T1"}, doc_id="d1"),
-    ]
+async def test_build_persona_bundle_limits_retrieval_query_to_search_relevant_context(
+    rag_graph: RAGGraph,
+) -> None:
+    docs = [Document(content="doc0 content", metadata={"title": "T0"}, doc_id="d0")]
 
-    async def fake_invoke(_prompt, data):
-        if "global_memory" in data and "passages" in data:
-            return '{"rewritten_query":"rewritten q","source_plan":["wiki"]}'
-        if "global_memory" in data and "documents" in data:
-            return '{"ranked_indices":[1,0],"rerank_notes":["profile boost"]}'
-        return "{}"
+    async def fake_profile(_session_id: str) -> dict[str, object]:
+        return {
+            "preferred_topics": ["rag", "evaluation", "citations"],
+            "explicit_notes": ["Explain with evidence"],
+            "response_style": "evidence_first",
+        }
 
-    async def fake_search(query: str, k: int, vector_weight: float):
-        assert query == "rewritten q"
-        return RetrievedContext(documents=docs, scores=[0.9, 0.8], total_hits=2)
+    async def fake_invoke(_prompt: object, data: dict[str, object]) -> str:
+        assert data["query"] == "tell me more"
+        assert "Explain retrieval quality" in str(data["recent_user_context"])
+        return '{"attach_context": true, "reason": "follow-up query"}'
+
+    async def fake_search(query: str, k: int, vector_weight: float) -> RetrievedContext:
+        assert query.startswith("tell me more")
+        assert "Recent user context: Explain retrieval quality" in query
+        assert "Topic hints: rag, evaluation" in query
+        assert "response_style" not in query
+        assert "evidence_first" not in query
+        assert "Explain with evidence" not in query
+        assert "assistant:Do not leak this reply" not in query
+        assert k == 3
+        assert vector_weight == 0.5
+        return RetrievedContext(documents=docs, scores=[0.9], total_hits=1)
+
+    state = GraphState(
+        query="original query",
+        session_id="s1",
+        next_query="tell me more",
+        chat_history=[
+            Message(role="user", content="Explain retrieval quality"),
+            Message(role="assistant", content="Do not leak this reply"),
+            Message(role="user", content="Focus on search metrics"),
+        ],
+    )
 
     rag_graph._invoke = fake_invoke  # type: ignore[assignment]
 
     with patch(
-        "graphs.rag_graph.elasticsearch_store.hybrid_search", side_effect=fake_search
+        "graphs.rag_graph.memory_store.get_user_profile",
+        side_effect=fake_profile,
+    ), patch(
+        "graphs.rag_graph.elasticsearch_store.hybrid_search",
+        side_effect=fake_search,
     ):
-        state = GraphState(query="test query", session_id="s3")
         result = await rag_graph._build_persona_bundle_node(state)
 
-    bundle = result["persona_bundle"]
-    pool = result["global_message_pool"]
-
-    assert bundle.top_docs[0].doc_id == "d1"
-    assert pool.retrieval_plan["rewritten_query"] == "rewritten q"
-    assert pool.rerank_notes == ["profile boost"]
-
-
-@pytest.mark.asyncio
-async def test_check_sufficiency_respects_loop_cap(rag_graph: RAGGraph) -> None:
-    state = GraphState(query="q", session_id="s4")
-    state.selfrag_scores = SelfRagScores(insufficiency_reasons=["low_utility"])
-    state.loop_count = 0
-    state.max_loops = 2
-
-    r1 = await rag_graph._check_sufficiency_node(state)
-    assert r1["next_action"] == "reinforce"
-
-    state.loop_count = 2
-    r2 = await rag_graph._check_sufficiency_node(state)
-    assert r2["next_action"] == "finalize"
+    assert result["retrieved_docs"][0].doc_id == "d0"
+    assert result["retrieval_scores"] == [0.9]
+    assert result["last_retrieval_query"] == result["retrieval_query"]
+    assert "assistant:Do not leak this reply" in result["session_summary"]
+    assert "Response style: evidence_first" in result["generation_hints"]
+    assert "Preferred topics: rag, evaluation, citations" in result["generation_hints"]
+    assert "Notes: Explain with evidence" in result["generation_hints"]
 
 
 @pytest.mark.asyncio
-async def test_selfrag_critique_accepts_paper_style_labels(rag_graph: RAGGraph) -> None:
+async def test_build_persona_bundle_keeps_specific_query_clean(
+    rag_graph: RAGGraph,
+) -> None:
+    docs = [Document(content="doc0 content", metadata={"title": "T0"}, doc_id="d0")]
+    query = "How should we evaluate retrieval precision for a RAG system?"
+
+    async def fake_profile(_session_id: str) -> dict[str, object]:
+        return {
+            "preferred_topics": ["rag", "evaluation"],
+            "explicit_notes": ["Keep answers concise"],
+            "response_style": "balanced",
+        }
+
+    async def fake_invoke(_prompt: object, data: dict[str, object]) -> str:
+        assert data["query"] == query
+        return '{"attach_context": false, "reason": "standalone query"}'
+
+    async def fake_search(query: str, k: int, vector_weight: float) -> RetrievedContext:
+        assert query == "How should we evaluate retrieval precision for a RAG system?"
+        return RetrievedContext(documents=docs, scores=[0.7], total_hits=1)
+
+    state = GraphState(
+        query=query,
+        session_id="s2",
+        chat_history=[
+            Message(role="user", content="Earlier question"),
+            Message(role="assistant", content="Earlier answer"),
+        ],
+    )
+
+    rag_graph._invoke = fake_invoke  # type: ignore[assignment]
+
+    with patch(
+        "graphs.rag_graph.memory_store.get_user_profile",
+        side_effect=fake_profile,
+    ), patch(
+        "graphs.rag_graph.elasticsearch_store.hybrid_search",
+        side_effect=fake_search,
+    ):
+        result = await rag_graph._build_persona_bundle_node(state)
+
+    assert result["retrieval_query"] == state.query
+
+
+@pytest.mark.asyncio
+async def test_build_persona_bundle_skips_attachment_when_llm_response_is_invalid(
+    rag_graph: RAGGraph,
+) -> None:
+    docs = [Document(content="doc0 content", metadata={"title": "T0"}, doc_id="d0")]
+
+    async def fake_profile(_session_id: str) -> dict[str, object]:
+        return {
+            "preferred_topics": ["rag", "evaluation"],
+            "explicit_notes": ["Keep answers concise"],
+            "response_style": "balanced",
+        }
+
+    async def fake_invoke(_prompt: object, _data: dict[str, object]) -> str:
+        return "not-json"
+
+    async def fake_search(query: str, k: int, vector_weight: float) -> RetrievedContext:
+        assert query == "Can you expand this?"
+        return RetrievedContext(documents=docs, scores=[0.7], total_hits=1)
+
+    rag_graph._invoke = fake_invoke  # type: ignore[assignment]
+
+    state = GraphState(
+        query="Can you expand this?",
+        session_id="s-extra",
+        chat_history=[Message(role="user", content="We were discussing retrieval metrics")],
+    )
+
+    with patch(
+        "graphs.rag_graph.memory_store.get_user_profile",
+        side_effect=fake_profile,
+    ), patch(
+        "graphs.rag_graph.elasticsearch_store.hybrid_search",
+        side_effect=fake_search,
+    ):
+        result = await rag_graph._build_persona_bundle_node(state)
+
+    assert result["retrieval_query"] == state.query
+
+
+@pytest.mark.asyncio
+async def test_selfrag_critique_uses_generation_hints_and_normalizes_same_query(
+    rag_graph: RAGGraph,
+) -> None:
     docs = [Document(content="supported answer evidence", metadata={}, doc_id="1")]
+    seen_payload: dict[str, object] = {}
 
-    async def fake_invoke(_prompt, _data):
+    async def fake_invoke(_prompt: object, data: dict[str, object]) -> str:
+        seen_payload.update(data)
         return """
         {
-          "retrieve_decisions":["[No Retrieval]"],
-          "relevance_labels":["[Relevant]"],
-          "support_labels":["[Fully supported]"],
-          "utility_score": 4
+          "answer": "Grounded answer.",
+          "is_sufficient": false,
+          "utility_score": 4.5,
+          "confidence": 0.82,
+          "insufficiency_reasons": ["missing_date"],
+          "next_query": "Original query!"
         }
         """
 
     rag_graph._invoke = fake_invoke  # type: ignore[assignment]
 
-    state = GraphState(query="q", session_id="s-critique", retrieved_docs=docs)
-    state.draft_answer = "supported answer"
+    state = GraphState(
+        query="Original query",
+        session_id="s3",
+        retrieved_docs=docs,
+        retrieval_scores=[0.8],
+        retrieval_query="Original query\nRecent user context: prior topic",
+        session_summary="user:Original query",
+        generation_hints=(
+            "User preferences:\n"
+            "- Response style: evidence_first\n"
+            "- Notes: Explain with citations"
+        ),
+    )
 
     result = await rag_graph._self_critique_node(state)
     scores = result["selfrag_scores"]
 
-    assert scores.retrieve_decisions == ["No"]
-    assert scores.rel_scores == [1.0]
-    assert scores.full_support_ratio == 1.0
+    assert seen_payload["generation_hints"] == state.generation_hints
+    assert "user_profile" not in seen_payload
+    assert result["answer"] == "Grounded answer."
+    assert result["is_sufficient"] is False
+    assert result["next_query"] == "Original query"
+    assert scores.utility_score == 4.5
+    assert scores.confidence == 0.82
 
 
 @pytest.mark.asyncio
-async def test_identify_evidence_exception_fallback_returns_all_indices(
+async def test_selfrag_critique_falls_back_when_json_is_invalid(
     rag_graph: RAGGraph,
 ) -> None:
-    docs = [
-        Document(content="a", metadata={}, doc_id="1"),
-        Document(content="b", metadata={}, doc_id="2"),
-    ]
-    state = GraphState(query="q", session_id="s5", retrieved_docs=docs)
+    async def fake_invoke(_prompt: object, _data: dict[str, object]) -> str:
+        return "not-json"
 
-    with patch("asyncio.to_thread", side_effect=Exception("fail")):
-        result = await rag_graph._identify_evidence_node(state)
+    rag_graph._invoke = fake_invoke  # type: ignore[assignment]
 
-    assert result["evidence_indices"] == [0, 1]
+    state = GraphState(
+        query="Question",
+        session_id="s4",
+        retrieved_docs=[],
+        retrieval_scores=[],
+    )
+
+    result = await rag_graph._self_critique_node(state)
+
+    assert result["is_sufficient"] is False
+    assert result["next_query"] == "Question"
+    assert "No relevant documents were retrieved" in result["answer"]
+
+
+@pytest.mark.asyncio
+async def test_check_sufficiency_respects_loop_cap(rag_graph: RAGGraph) -> None:
+    state = GraphState(
+        query="q",
+        session_id="s5",
+        selfrag_scores=SelfRagScores(
+            utility_score=2.0,
+            confidence=0.3,
+            insufficiency_reasons=["low_utility"],
+            next_query="better q",
+        ),
+        next_query="better q",
+        is_sufficient=False,
+        loop_count=0,
+        max_loops=1,
+    )
+
+    retry_result = await rag_graph._check_sufficiency_node(state)
+    assert retry_result["next_action"] == "retry"
+    assert retry_result["loop_count"] == 1
+    assert retry_result["next_query"] == "better q"
+
+    state.loop_count = 1
+    finalize_result = await rag_graph._check_sufficiency_node(state)
+    assert finalize_result["next_action"] == "finalize"
 
 
 @pytest.mark.asyncio
@@ -118,7 +269,7 @@ async def test_feedback_updates_profile_explicitly() -> None:
     feedback = {
         "session_id": "s6",
         "rating": 2,
-        "feedback_text": "더 근거가 필요해",
+        "feedback_text": "Please cite evidence.",
         "tags": ["factual", "citation"],
         "metadata": {"response_style": "evidence_first"},
     }

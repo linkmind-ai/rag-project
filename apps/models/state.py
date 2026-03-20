@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -63,53 +63,13 @@ class RetrievedContext(BaseModel):
     model_config = ConfigDict(frozen=False)
 
 
-class RouteDecision(BaseModel):
-    """Step-1 routing decision."""
-
-    task_type: Literal["creative", "conversational", "factual", "ambiguous"] = (
-        "ambiguous"
-    )
-    risk_level: Literal["low", "high"] = "low"
-    retrieval_policy: Literal["minimal", "forced", "adaptive"] = "adaptive"
-    used_llm_fallback: bool = False
-
-    model_config = ConfigDict(frozen=False)
-
-
-class EvidenceBundleE0(BaseModel):
-    """Initial personalized evidence bundle from PersonaRAG."""
-
-    top_docs: list[Document] = Field(default_factory=list)
-    doc_summaries: list[dict[str, Any]] = Field(default_factory=list)
-    citations_meta: list[dict[str, Any]] = Field(default_factory=list)
-
-    model_config = ConfigDict(frozen=False)
-
-
-class GlobalMessagePoolM0(BaseModel):
-    """Global message pool shared by PersonaRAG agents."""
-
-    profile_snapshot: dict[str, Any] = Field(default_factory=dict)
-    session_summary: str = ""
-    retrieval_plan: dict[str, Any] = Field(default_factory=dict)
-    rerank_notes: list[str] = Field(default_factory=list)
-
-    model_config = ConfigDict(frozen=False)
-
-
 class SelfRagScores(BaseModel):
-    """Self-RAG critique outputs and aggregates."""
+    """Minimal Self-RAG outputs for adaptive retry."""
 
-    retrieve_decisions: list[str] = Field(default_factory=list)
-    rel_scores: list[float] = Field(default_factory=list)
-    support_scores: list[dict[str, float]] = Field(default_factory=list)
     utility_score: float = 0.0
-    avg_isrel: float = 0.0
-    no_support_ratio: float = 0.0
-    partial_or_no_support_ratio: float = 0.0
-    full_support_ratio: float = 0.0
-    objective_score: float = 0.0
+    confidence: float = 0.0
     insufficiency_reasons: list[str] = Field(default_factory=list)
+    next_query: str = ""
 
     model_config = ConfigDict(frozen=False)
 
@@ -118,31 +78,21 @@ class GraphState(BaseModel):
     """LangGraph state model."""
 
     query: str = Field(..., description="User query")
+    session_id: str = Field(..., description="Session id")
     chat_history: list[Message] = Field(default_factory=list)
     retrieved_docs: list[Document] = Field(default_factory=list)
+    retrieval_scores: list[float] = Field(default_factory=list)
+    retrieval_query: str = ""
+    session_summary: str = ""
+    generation_hints: str = ""
+    user_profile: dict[str, Any] = Field(default_factory=dict)
     answer: str = Field(default="")
-    evidence_indices: list[int] = Field(default_factory=list)
-    session_id: str = Field(..., description="Session id")
-
-    route: RouteDecision = Field(default_factory=RouteDecision)
-    persona_bundle: EvidenceBundleE0 = Field(default_factory=EvidenceBundleE0)
-    global_message_pool: GlobalMessagePoolM0 = Field(
-        default_factory=GlobalMessagePoolM0
-    )
-
-    draft_answer: str = ""
-    final_answer: str = ""
     selfrag_scores: SelfRagScores = Field(default_factory=SelfRagScores)
-
     loop_count: int = 0
     max_loops: int = 2
-    strictness_level: int = 0
-
-    transparency: dict[str, Any] = Field(default_factory=dict)
     is_sufficient: bool = False
-    next_action: Literal["reinforce", "finalize"] = "finalize"
-
-    answer_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    next_action: Literal["retry", "finalize"] = "finalize"
+    next_query: str = ""
     last_retrieval_query: str = ""
 
     model_config = ConfigDict(frozen=False)
