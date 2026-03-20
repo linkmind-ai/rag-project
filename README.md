@@ -199,8 +199,4 @@ pytest tests/test_persona_selfrag_integration.py tests/test_query_api.py
 - Self-RAG는 가볍게 유지하고, 필요할 때만 재검색한다.
 - 외부 API shape는 안정적으로 유지한다.
 
-## 알려진 한계
 
-- `self_critique` 노드가 아직 답변 생성, 충분성 판단, next query 생성을 함께 담당합니다.
-- `is_sufficient` 분기가 여전히 LLM 판단에 크게 의존합니다.
-- `sources`는 검색된 문서 목록이며, 실제 사용된 근거 문장 추적까지는 하지 않습니다.
