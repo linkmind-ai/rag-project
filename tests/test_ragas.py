@@ -1,40 +1,72 @@
 """
-test_ragas.py — Phase 2: RAGAS 생성 품질 평가
+test_ragas.py — Phase 2: RAGAS 생성 품질 평가 (4개 메트릭)
 
 [실행 방법]
     # .venv-eval 환경에서 실행 (langchain-core 버전 충돌 방지)
     source .venv-eval/bin/activate
-    pytest tests/test_ragas.py -v -s
+
+    # Groq judge (KEY_1/KEY_2 분리)
+    pytest tests/test_ragas.py::TestRAGAS -v -s
+
+    # Ollama judge (gemma3:27b, rate limit 없음)
+    pytest tests/test_ragas.py::TestRAGASOllama -v -s
 
 [전제 조건]
-- .env에 GROQ_API_KEY 설정 완료
-- .env에 ES_HOST, ES_API_KEY, OLLAMA_HOST 설정 완료
-- pip install -r requirements-eval.txt (별도 venv 필요)
+- .env에 ES_HOST, ES_API_KEY, OLLAMA_HOST 설정
+- .env에 CF_ACCESS_CLIENT_ID, CF_ACCESS_CLIENT_SECRET 설정 (Cloudflare Access)
+- Groq judge 사용 시: GROQ_API_KEY (KEY_1) + GROQ_API_KEY_2 (KEY_2) 설정
+- pip install -r requirements-eval.txt (.venv-eval 환경)
+
+[golden_set.json 준비]
+  자동 생성 (권장):
+    python tests/generate_golden_set.py --size 50
+    → Ollama gemma3:4b가 ES 문서 기반으로 질문+정답+근거청크를 자동 생성.
+    → reference_contexts 필드 포함 → ContextPrecision/Recall 측정 가능.
+
+  수동 작성: query / summary 필드만 있는 기존 형식도 그대로 동작.
 
 [RAGAS 평가 흐름]
-  golden_set.json (10 쿼리)
-      │
+  golden_set.json (50 쿼리)
+      │  query               (질문)
+      │  reference           (정답)
+      │  reference_contexts  (근거 청크 — ContextRecall/Precision 필요)
       ▼
-  hybrid_search (ES) → contexts: list[str]
+  hybrid_search (ES) → retrieved_contexts: list[str]
       │
       ▼
   Ollama EXAONE (실제 RAG 시스템 LLM) → answer: str
       │
       ▼
-  EvaluationDataset (SingleTurnSample × 10)
+  EvaluationDataset (SingleTurnSample × 50)
       │
-      ▼
-  RAGAS evaluate() — 평가 judge: Groq llama-3.3-70b
-      ├─ Faithfulness       → 기준 ≥ 70%
-      └─ AnswerRelevancy    → 기준 ≥ 70%
+      ├── [TestRAGAS] Groq KEY_1 ──────────────────────────────────
+      │   ├─ Faithfulness      → 기준 ≥ 70%
+      │   └─ ContextPrecision  → 기준 ≥ 70%
+      │
+      ├── [TestRAGAS] Groq KEY_2 ──────────────────────────────────
+      │   ├─ AnswerRelevancy   → 기준 ≥ 70%
+      │   └─ ContextRecall     → 기준 ≥ 70%
+      │
+      └── [TestRAGASOllama] Ollama gemma3:27b ────────────────────
+          ├─ Faithfulness + ContextPrecision  (test_retrieval_metrics)
+          └─ AnswerRelevancy + ContextRecall  (test_generation_metrics)
 
 [역할 분리]
-- 답변 생성: Ollama EXAONE — 실제 운영 시스템과 동일한 LLM으로 측정
-- RAGAS 평가(judge): Groq llama-3.3-70b — 답변이 컨텍스트에 근거하는지, 질문에 맞는지 판단
+- 질문 생성  : Ollama gemma3:4b — ES 문서 기반 자동 생성 (generate_golden_set.py)
+- 답변 생성  : Ollama EXAONE — 실제 운영 시스템과 동일한 LLM
+- 평가 judge : [기본] Groq KEY_1 → Faithfulness + ContextPrecision
+                       Groq KEY_2 → AnswerRelevancy + ContextRecall
+               [대안] Ollama gemma3:27b → 4개 메트릭 전체 (rate limit 없음)
 
 [Groq Rate Limit 대응]
-- 100K TPD (일일 토큰) 제한
-- KEY_1(GROQ_API_KEY)과 KEY_2(GROQ_API_KEY_2)가 다른 계정이면 각각 100K 확보 가능
+- 100K TPD (일일 토큰) 제한 — 50샘플 × 4메트릭 ≈ 200 LLM 호출
+- KEY_1 / KEY_2 분리 (별도 계정)로 각각 100K → 총 200K 사용 가능
+- 대안: TestRAGASOllama (Ollama gemma3:27b) — TPD 제한 없음
+
+[Ollama judge 주의사항]
+- RunConfig(timeout=300, max_retries=1, max_workers=4) 필수
+- 기본 max_workers=16은 gemma3:27b 서버 과부하 유발 (GPU 100% + swap)
+- gemma3:27b vs gemma3:4b: AnswerRelevancy 72.2% vs 19.5% → gemma3:27b 권장
 """
 
 from __future__ import annotations
@@ -64,6 +96,8 @@ _RESULT_PATH = _TESTS_DIR / "ragas_result.json"
 
 _FAITHFULNESS_THRESHOLD = 0.70
 _ANSWER_RELEVANCY_THRESHOLD = 0.70
+_CONTEXT_PRECISION_THRESHOLD = 0.70
+_CONTEXT_RECALL_THRESHOLD = 0.70
 
 
 # ── 헬퍼 함수 ─────────────────────────────────────────────────────────────────
@@ -117,7 +151,8 @@ def _generate_answer(llm: "Ollama", question: str, contexts: list[str]) -> str:
     prompt = (
         "[지시] 아래 컨텍스트에 있는 내용만을 사용하여 답변하세요.\n"
         "컨텍스트에 없는 정보는 절대 포함하지 마세요. 배경 지식이나 추론을 추가하지 마세요.\n"
-        "컨텍스트에서 직접 확인 가능한 수치나 사실을 포함하여 3~5문장으로 작성하세요.\n"
+        f"반드시 첫 문장을 '{question}' 라는 질문에 대해, 로 시작하세요.\n"
+        "이후 컨텍스트에서 확인된 핵심 사실을 2~3문장으로 답하세요.\n"
         "컨텍스트에 답이 없으면 '해당 정보를 찾을 수 없습니다'라고 답하세요.\n\n"
         f"컨텍스트:\n{context_text}\n\n"
         f"질문: {question}\n답변:"
@@ -157,7 +192,7 @@ def _build_ragas_embeddings() -> "LangchainEmbeddingsWrapper":  # type: ignore[n
 
 async def _build_ragas_dataset(
     golden_set: list[dict],
-    k: int = 5,
+    k: int = 3,
 ) -> object:
     """
     Golden Set으로부터 RAGAS EvaluationDataset 빌드.
@@ -191,14 +226,18 @@ async def _build_ragas_dataset(
         answer = await asyncio.to_thread(_generate_answer, ollama_llm, query, contexts)
         print(f"  ✅ {query[:55]}...")
 
-        samples.append(
-            SingleTurnSample(
-                user_input=query,
-                retrieved_contexts=contexts,
-                response=answer,
-                reference=item.get("summary", ""),
-            )
-        )
+        sample_kwargs: dict = {
+            "user_input": query,
+            "retrieved_contexts": contexts,
+            "response": answer,
+            # reference: 자동 생성 시 상세 정답, 수동 작성 시 summary fallback
+            "reference": item.get("reference") or item.get("summary", ""),
+        }
+        # reference_contexts 있으면 ContextRecall/ContextPrecision 측정 가능
+        if item.get("reference_contexts"):
+            sample_kwargs["reference_contexts"] = item["reference_contexts"]
+
+        samples.append(SingleTurnSample(**sample_kwargs))
 
     await elasticsearch_store.close()
 
@@ -207,14 +246,20 @@ async def _build_ragas_dataset(
 
 
 def _save_result(
-    result: object,
     dataset: object,
-    faithfulness: float,
-    answer_relevancy: float,
+    scores: dict[str, float],
     output_path: Path = _RESULT_PATH,
 ) -> None:
-    """평가 결과를 JSON 파일로 저장."""
+    """평가 결과(4개 메트릭)를 JSON 파일로 저장. 누적 업데이트 방식."""
     from datetime import datetime
+
+    # 기존 파일 있으면 로드해서 누적
+    existing: dict = {}
+    if output_path.exists():
+        try:
+            existing = json.loads(output_path.read_text(encoding="utf-8"))
+        except Exception:
+            existing = {}
 
     per_query = []
     for i, sample in enumerate(dataset.samples):  # type: ignore[attr-defined]
@@ -226,19 +271,22 @@ def _save_result(
             "ground_truth": sample.reference,
         })
 
+    merged_scores = {**existing.get("summary", {}), **{k: round(v, 4) for k, v in scores.items()}}
+    thresholds = {
+        "faithfulness": _FAITHFULNESS_THRESHOLD,
+        "answer_relevancy": _ANSWER_RELEVANCY_THRESHOLD,
+        "context_precision": _CONTEXT_PRECISION_THRESHOLD,
+        "context_recall": _CONTEXT_RECALL_THRESHOLD,
+    }
+
     output = {
         "evaluated_at": datetime.now().isoformat(),
         "summary": {
-            "faithfulness": round(faithfulness, 4),
-            "answer_relevancy": round(answer_relevancy, 4),
-            "faithfulness_pass": bool(faithfulness >= _FAITHFULNESS_THRESHOLD),
-            "answer_relevancy_pass": bool(answer_relevancy >= _ANSWER_RELEVANCY_THRESHOLD),
+            **merged_scores,
+            **{f"{k}_pass": bool(merged_scores.get(k, 0) >= thresholds[k]) for k in thresholds},
             "total_queries": len(per_query),
         },
-        "thresholds": {
-            "faithfulness": _FAITHFULNESS_THRESHOLD,
-            "answer_relevancy": _ANSWER_RELEVANCY_THRESHOLD,
-        },
+        "thresholds": thresholds,
         "per_query": per_query,
     }
 
@@ -251,12 +299,17 @@ def _save_result(
 # ── TestRAGAS ─────────────────────────────────────────────────────────────────
 
 class TestRAGAS:
-    """RAGAS 기반 생성 품질 평가 — Groq LLM 필요."""
+    """
+    RAGAS 기반 생성 품질 평가 — 4개 메트릭, KEY_1 / KEY_2 분리.
+
+    KEY_1: Faithfulness + ContextPrecision
+    KEY_2: AnswerRelevancy + ContextRecall
+    """
 
     @pytest.fixture(scope="class")
     def ragas_dataset(self) -> object:
         """
-        class scope: Faithfulness + AnswerRelevancy 두 테스트에서 Dataset 1회 생성 재사용.
+        class scope: 4개 테스트에서 Dataset 1회 생성 재사용.
 
         Dataset 빌드 = ES hybrid_search + Ollama 답변 생성.
         """
@@ -264,58 +317,71 @@ class TestRAGAS:
         print(f"\n  📊 RAGAS Dataset 생성 중... ({len(golden_set)}개 쿼리, Ollama 답변 생성)")
         return asyncio.run(_build_ragas_dataset(golden_set))
 
-    def test_faithfulness(
+    def test_faithfulness_and_context_precision(
         self,
         ragas_dataset: object,
-        groq_eval_llm: ChatGroq,
+        groq_llm_key1: "ChatGroq",
     ) -> None:
         """
-        Faithfulness 측정 — LLM 답변이 검색된 원문 청크에만 근거하는지 검증.
+        [KEY_1] Faithfulness + ContextPrecision 측정.
 
-        Faithfulness = 뒷받침 가능한 주장 수 / 전체 주장 수
-        기준: ≥ 70%
+        Faithfulness      = 뒷받침 가능한 주장 수 / 전체 주장 수         기준 ≥ 70%
+        ContextPrecision  = 관련 청크가 상위에 랭크되는지 여부            기준 ≥ 70%
         """
         from ragas import evaluate
         from ragas.llms import LangchainLLMWrapper
-        from ragas.metrics import Faithfulness
+        from ragas.metrics import ContextPrecision, Faithfulness
 
-        ragas_llm = LangchainLLMWrapper(groq_eval_llm)
+        ragas_llm = LangchainLLMWrapper(groq_llm_key1)
 
-        # 메트릭에 llm 직접 전달 필수 (미전달 시 NaN 반환 — ragas 0.2+ 버그)
         result = evaluate(
             dataset=ragas_dataset,
-            metrics=[Faithfulness(llm=ragas_llm, max_retries=3)],
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=3),
+                ContextPrecision(llm=ragas_llm),
+            ],
             llm=ragas_llm,
         )
 
-        score = _ragas_score(result, "faithfulness")
-        print(f"\n  Faithfulness : {score:.3f} ({score:.1%})")
-        print(f"  평가 샘플 수 : {len(ragas_dataset.samples)}개")  # type: ignore[attr-defined]
+        f_score = _ragas_score(result, "faithfulness")
+        cp_score = _ragas_score(result, "context_precision")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
 
-        assert score >= _FAITHFULNESS_THRESHOLD, (
-            f"Faithfulness = {score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달.\n"
+        print(f"\n  [KEY_1] 평가 샘플 수    : {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        _save_result(ragas_dataset, {"faithfulness": f_score, "context_precision": cp_score})
+
+        assert f_score >= _FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness = {f_score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달.\n"
             "  → 1) RAG 컨텍스트 품질 확인 (Hit Rate/MRR 먼저 검토)\n"
             "  → 2) 프롬프트의 '원문 기반 답변' 지시 강화"
         )
+        assert cp_score >= _CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision = {cp_score:.1%} — 목표 {_CONTEXT_PRECISION_THRESHOLD:.0%} 미달.\n"
+            "  → 1) 하이브리드 검색 가중치 조정 (벡터 vs BM25)\n"
+            "  → 2) 검색 k값 축소로 노이즈 청크 제거"
+        )
 
-    def test_answer_relevancy(
+    def test_answer_relevancy_and_context_recall(
         self,
         ragas_dataset: object,
-        groq_eval_llm: ChatGroq,
+        groq_llm_key2: "ChatGroq",
     ) -> None:
         """
-        Answer Relevancy 측정 — 답변이 질문에 관련 있는지 검증.
+        [KEY_2] AnswerRelevancy + ContextRecall 측정.
 
-        역생성된 질문과 원래 질문의 코사인 유사도 (bge-m3 임베딩 사용).
-        기준: ≥ 70%
+        AnswerRelevancy = 역생성 질문과 원래 질문의 임베딩 유사도    기준 ≥ 70%
+        ContextRecall   = reference 커버에 필요한 청크 검색 여부     기준 ≥ 70%
 
-        strictness=1 필수: Groq는 n>1 복수 completion 미지원 (BadRequestError 방지).
+        strictness=1 필수: Groq는 n>1 복수 completion 미지원.
         """
         from ragas import evaluate
         from ragas.llms import LangchainLLMWrapper
-        from ragas.metrics import AnswerRelevancy
+        from ragas.metrics import AnswerRelevancy, ContextRecall
 
-        ragas_llm = LangchainLLMWrapper(groq_eval_llm)
+        ragas_llm = LangchainLLMWrapper(groq_llm_key2)
         ragas_embeddings = _build_ragas_embeddings()
 
         result = evaluate(
@@ -325,24 +391,161 @@ class TestRAGAS:
                     llm=ragas_llm,
                     embeddings=ragas_embeddings,
                     strictness=1,  # Groq n>1 미지원 → 필수
-                )
+                ),
+                ContextRecall(llm=ragas_llm),
             ],
             llm=ragas_llm,
             embeddings=ragas_embeddings,
         )
 
-        score = _ragas_score(result, "answer_relevancy")
-        print(f"\n  Answer Relevancy : {score:.3f} ({score:.1%})")
-        print(f"  평가 샘플 수     : {len(ragas_dataset.samples)}개")  # type: ignore[attr-defined]
+        ar_score = _ragas_score(result, "answer_relevancy")
+        cr_score = _ragas_score(result, "context_recall")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
 
-        # 두 메트릭 모두 측정된 시점에 결과 저장
-        faithfulness = _ragas_score(result, "faithfulness") if "faithfulness" in result else 0.0  # type: ignore[operator]
-        _save_result(result, ragas_dataset, faithfulness, score)
+        print(f"\n  [KEY_2] 평가 샘플 수    : {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
 
-        assert score >= _ANSWER_RELEVANCY_THRESHOLD, (
-            f"Answer Relevancy = {score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달.\n"
+        _save_result(ragas_dataset, {"answer_relevancy": ar_score, "context_recall": cr_score})
+
+        assert ar_score >= _ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy = {ar_score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달.\n"
             "  → 1) RAG 컨텍스트 관련성 확인\n"
             "  → 2) 답변 생성 프롬프트 개선 (질문 직접 답변 지시 추가)"
+        )
+        assert cr_score >= _CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달.\n"
+            "  → 1) 검색 k값 증가로 더 많은 청크 포함\n"
+            "  → 2) 청크 분할 크기 조정 (CHUNK_SIZE/OVERLAP)"
+        )
+
+
+# ── TestRAGASOllama ───────────────────────────────────────────────────────────
+
+class TestRAGASOllama:
+    """
+    Ollama gemma3:4b judge로 4개 메트릭을 단일 모델에서 처리.
+
+    Groq 대비 장점:
+    - TPD/RPM rate limit 없음
+    - KEY 분리 불필요 — 모든 메트릭을 한 번에 실행
+    - 50샘플 × 4메트릭 ≈ 6분 예상
+
+    실행:
+        pytest tests/test_ragas.py::TestRAGASOllama -v -s
+    """
+
+    @pytest.fixture(scope="class")
+    def ragas_dataset(self) -> object:
+        """class scope: 두 테스트에서 Dataset 1회 생성 재사용."""
+        golden_set = json.loads(_GOLDEN_SET_PATH.read_text(encoding="utf-8"))
+        print(f"\n  📊 RAGAS Dataset 생성 중... ({len(golden_set)}개 쿼리, Ollama 답변 생성)")
+        return asyncio.run(_build_ragas_dataset(golden_set))
+
+    def test_retrieval_metrics(
+        self,
+        ragas_dataset: object,
+        ollama_judge_llm: object,
+    ) -> None:
+        """
+        [Ollama] Faithfulness + ContextPrecision 측정.
+
+        Faithfulness     = 뒷받침 가능한 주장 수 / 전체 주장 수    기준 ≥ 70%
+        ContextPrecision = 관련 청크가 상위에 랭크되는지 여부       기준 ≥ 70%
+        """
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import ContextPrecision, Faithfulness
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(ollama_judge_llm)
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=1),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        f_score = _ragas_score(result, "faithfulness")
+        cp_score = _ragas_score(result, "context_precision")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama gemma3:27b] 평가 샘플 수 : {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        _save_result(ragas_dataset, {"faithfulness": f_score, "context_precision": cp_score})
+
+        assert f_score >= _FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness = {f_score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달.\n"
+            "  → 1) RAG 컨텍스트 품질 확인 (Hit Rate/MRR 먼저 검토)\n"
+            "  → 2) 프롬프트의 '원문 기반 답변' 지시 강화"
+        )
+        assert cp_score >= _CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision = {cp_score:.1%} — 목표 {_CONTEXT_PRECISION_THRESHOLD:.0%} 미달.\n"
+            "  → 1) 하이브리드 검색 가중치 조정\n"
+            "  → 2) 검색 k값 축소로 노이즈 청크 제거"
+        )
+
+    def test_generation_metrics(
+        self,
+        ragas_dataset: object,
+        ollama_judge_llm: object,
+    ) -> None:
+        """
+        [Ollama] AnswerRelevancy + ContextRecall 측정.
+
+        AnswerRelevancy = 역생성 질문과 원래 질문의 임베딩 유사도   기준 ≥ 70%
+        ContextRecall   = reference 커버에 필요한 청크 검색 여부    기준 ≥ 70%
+
+        strictness=1 필수: Ollama는 n>1 복수 completion 미지원.
+        """
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import AnswerRelevancy, ContextRecall
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(ollama_judge_llm)
+        ragas_embeddings = _build_ragas_embeddings()
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                AnswerRelevancy(
+                    llm=ragas_llm,
+                    embeddings=ragas_embeddings,
+                    strictness=1,
+                ),
+                ContextRecall(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            embeddings=ragas_embeddings,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        ar_score = _ragas_score(result, "answer_relevancy")
+        cr_score = _ragas_score(result, "context_recall")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama gemma3:27b] 평가 샘플 수 : {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
+
+        _save_result(ragas_dataset, {"answer_relevancy": ar_score, "context_recall": cr_score})
+
+        assert ar_score >= _ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy = {ar_score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달.\n"
+            "  → 1) RAG 컨텍스트 관련성 확인\n"
+            "  → 2) 답변 생성 프롬프트 개선"
+        )
+        assert cr_score >= _CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달.\n"
+            "  → 1) 검색 k값 증가로 더 많은 청크 포함\n"
+            "  → 2) 청크 분할 크기 조정 (CHUNK_SIZE/OVERLAP)"
         )
 
 
@@ -364,46 +567,69 @@ async def _main(k: int, output: str) -> None:
         print("❌ GROQ_API_KEY 미설정 — .env 확인")
         return
 
-    # Groq는 RAGAS 평가(judge) 전용 — 답변 생성은 Ollama가 담당
-    eval_key = settings.GROQ_API_KEY_2 or settings.GROQ_API_KEY
-    eval_llm = ChatGroq(api_key=eval_key, model="llama-3.3-70b-versatile")
-    if settings.GROQ_API_KEY_2:
-        print("  ✅ GROQ KEY_2 사용 (평가 judge)")
-    else:
-        print("  ⚠️  GROQ_API_KEY_2 미설정 — KEY_1으로 평가")
+    # KEY_1: Faithfulness + ContextPrecision
+    # KEY_2: AnswerRelevancy + ContextRecall
+    key1 = settings.GROQ_API_KEY
+    key2 = settings.GROQ_API_KEY_2 or key1
+    llm1 = ChatGroq(api_key=key1, model="llama-3.3-70b-versatile")
+    llm2 = ChatGroq(api_key=key2, model="llama-3.3-70b-versatile")
+    print(f"  KEY_1 → Faithfulness + ContextPrecision")
+    print(f"  KEY_2 → AnswerRelevancy + ContextRecall {'(KEY_1 fallback)' if not settings.GROQ_API_KEY_2 else ''}")
 
     golden_set = json.loads(_GOLDEN_SET_PATH.read_text(encoding="utf-8"))
 
-    print(f"📊 RAGAS Dataset 생성 중... (Ollama 답변 생성, {len(golden_set)}개 쿼리, k={k})")
+    print(f"\n📊 RAGAS Dataset 생성 중... (Ollama 답변 생성, {len(golden_set)}개 쿼리, k={k})")
     dataset = await _build_ragas_dataset(golden_set, k=k)
 
     from ragas import evaluate
     from ragas.llms import LangchainLLMWrapper
-    from ragas.metrics import Faithfulness, AnswerRelevancy
+    from ragas.metrics import AnswerRelevancy, ContextPrecision, ContextRecall, Faithfulness
 
-    ragas_llm = LangchainLLMWrapper(eval_llm)
+    llm1_wrapped = LangchainLLMWrapper(llm1)
+    llm2_wrapped = LangchainLLMWrapper(llm2)
     ragas_embeddings = _build_ragas_embeddings()
 
-    print("\n🔍 RAGAS 평가 실행 중...")
-    result = evaluate(
+    print("\n🔍 [KEY_1] Faithfulness + ContextPrecision 평가 중...")
+    result1 = evaluate(
         dataset=dataset,
         metrics=[
-            Faithfulness(llm=ragas_llm, max_retries=3),
-            AnswerRelevancy(llm=ragas_llm, embeddings=ragas_embeddings, strictness=1),
+            Faithfulness(llm=llm1_wrapped, max_retries=3),
+            ContextPrecision(llm=llm1_wrapped),
         ],
-        llm=ragas_llm,
+        llm=llm1_wrapped,
+    )
+
+    print("🔍 [KEY_2] AnswerRelevancy + ContextRecall 평가 중...")
+    result2 = evaluate(
+        dataset=dataset,
+        metrics=[
+            AnswerRelevancy(llm=llm2_wrapped, embeddings=ragas_embeddings, strictness=1),
+            ContextRecall(llm=llm2_wrapped),
+        ],
+        llm=llm2_wrapped,
         embeddings=ragas_embeddings,
     )
 
-    faithfulness = _ragas_score(result, "faithfulness")
-    answer_relevancy = _ragas_score(result, "answer_relevancy")
+    f  = _ragas_score(result1, "faithfulness")
+    cp = _ragas_score(result1, "context_precision")
+    ar = _ragas_score(result2, "answer_relevancy")
+    cr = _ragas_score(result2, "context_recall")
 
-    print(f"\n{'='*40}")
-    print(f"  Faithfulness     : {faithfulness:.1%}  {'✅' if faithfulness >= _FAITHFULNESS_THRESHOLD else '❌'}")
-    print(f"  Answer Relevancy : {answer_relevancy:.1%}  {'✅' if answer_relevancy >= _ANSWER_RELEVANCY_THRESHOLD else '❌'}")
-    print(f"{'='*40}")
+    thr = {
+        "faithfulness": _FAITHFULNESS_THRESHOLD,
+        "context_precision": _CONTEXT_PRECISION_THRESHOLD,
+        "answer_relevancy": _ANSWER_RELEVANCY_THRESHOLD,
+        "context_recall": _CONTEXT_RECALL_THRESHOLD,
+    }
+    scores = {"faithfulness": f, "context_precision": cp, "answer_relevancy": ar, "context_recall": cr}
 
-    _save_result(result, dataset, faithfulness, answer_relevancy, Path(output))
+    print(f"\n{'='*48}")
+    for name, val in scores.items():
+        icon = "✅" if val >= thr[name] else "❌"
+        print(f"  {name:<22}: {val:.1%}  {icon}")
+    print(f"{'='*48}")
+
+    _save_result(dataset, scores, Path(output))
 
 
 if __name__ == "__main__":
