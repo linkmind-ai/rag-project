@@ -225,7 +225,7 @@ class ElasticsearchStore:
             index_mapping = {
                 "mappings": {
                     "properties": {
-                        "content": {"type": "text", "analyzer": "standard"},
+                        "content": {"type": "text", "analyzer": "nori"},
                         "embedding": {
                             "type": "dense_vector",
                             "dims": settings.EMBEDDING_DIM,
@@ -261,15 +261,21 @@ class ElasticsearchStore:
                 self._text_splitter.split_text, doc.content
             )
 
-            for i, chunk in enumerate(chunks):
-                embedding = await asyncio.to_thread(self._embeddings.embed_query, chunk)
+            # embed_documents: 문서용 인터페이스로 배치 처리 (embed_query는 쿼리용)
+            # bge-m3 asymmetric retrieval 설계상 문서/쿼리 인코딩이 다름
+            embeddings = await asyncio.to_thread(
+                self._embeddings.embed_documents, chunks
+            )
 
+            origin_doc_id = doc.doc_id or self._generate_doc_id(
+                doc.content, doc.metadata
+            )
+            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
                 chunk_metadata = {
                     **doc.metadata,
                     "chunk_index": i,
                     "total_chunks": len(chunks),
-                    "origin_doc_id": doc.doc_id
-                    or self._generate_doc_id(doc.content, doc.metadata),
+                    "origin_doc_id": origin_doc_id,
                 }
                 doc_id = self._generate_doc_id(chunk, chunk_metadata)
 
@@ -309,7 +315,7 @@ class ElasticsearchStore:
                 "field": "embedding",
                 "query_vector": query_embedding,
                 "k": k,
-                "num_candidates": k * 2,
+                "num_candidates": k * 10,
             },
             "_source": ["content", "metadata", "doc_hash"],
         }
@@ -359,7 +365,7 @@ class ElasticsearchStore:
             "query": {
                 "bool": {
                     "must": [
-                        {"match": {"content": {"query": query, "analyzer": "standard"}}}
+                        {"match": {"content": {"query": query, "analyzer": "nori"}}}
                     ]
                 }
             },
@@ -406,113 +412,63 @@ class ElasticsearchStore:
         """
         하이브리드 검색: 벡터 유사도 + BM25 키워드 검색 결합.
 
-        두 검색 방식의 장점을 결합하여 검색 품질을 향상시킵니다:
-        - 벡터 검색: 의미적 유사성 포착 (동의어, 유사 개념)
-        - 키워드 검색: 정확한 용어 매칭 (고유명사, 전문용어)
+        RRF(Reciprocal Rank Fusion) 방식으로 두 검색 결과를 병합:
+        - 각 검색 결과의 순위(rank) 기반 점수 계산: 1 / (RRF_K + rank)
+        - min-max 정규화 대비 스코어 outlier에 강건하고 안정적인 병합 보장
+        - 두 검색 모두에서 등장한 문서는 RRF 점수가 누적되어 상위 랭크
+
+        수식:
+            rrf_score = vector_weight × (1/(60+vec_rank))
+                      + (1-vector_weight) × (1/(60+kw_rank))
 
         Args:
             query: 검색 쿼리 문자열
             k: 반환할 최대 문서 수
             filters: 메타데이터 기반 필터 조건
-            vector_weight: 벡터 검색 가중치 (0.0~1.0, 기본값 0.5)
-                          키워드 가중치는 자동으로 (1 - vector_weight)
+            vector_weight: 벡터 검색 RRF 가중치 (0.0~1.0, 기본값 0.5)
 
         Returns:
-            RetrievedContext: 정규화된 점수로 정렬된 검색 결과
+            RetrievedContext: RRF 점수로 정렬된 검색 결과
         """
         await self.initialize()
 
         k = k or settings.TOP_K_RESULTS
 
         # 두 검색을 병렬 실행하여 응답 시간 단축
-        # k*2개씩 가져와서 병합 후 상위 k개 선택
         vector_results, keyword_results = await asyncio.gather(
             self.similarity_search(query, k * 2, filters),
             self.keyword_search(query, k * 2, filters),
         )
 
+        # ═══════════════════════════════════════════════════════════════
+        # RRF(Reciprocal Rank Fusion) 병합
+        #
+        # 기존 min-max 정규화의 문제:
+        #   score / max_score → max_score가 outlier면 나머지 점수 왜곡
+        #
+        # RRF 해결책:
+        #   순위(rank) 기반 점수 → 절대 점수 크기 무관, 상대 순서만 반영
+        #   RRF_K=60: Cormack et al. 2009 논문 기본값, 상위/하위 rank 영향 균형
+        # ═══════════════════════════════════════════════════════════════
+        RRF_K = 60
         doc_scores: dict[str, tuple[Document, float]] = {}
 
-        # ┌──────────────────────────────────────────────────────────────────────┐
-        # │                하이브리드 스코어 정규화 수식 상세 설명                 │
-        # ├──────────────────────────────────────────────────────────────────────┤
-        # │ 문제: 두 검색 방식의 스코어 범위가 다름                               │
-        # │                                                                      │
-        # │   벡터 검색 (코사인 유사도)          BM25 키워드 검색                 │
-        # │   ┌────────────────────┐           ┌────────────────────┐           │
-        # │   │ 범위: 0.0 ~ 1.0    │           │ 범위: 0.0 ~ ∞      │           │
-        # │   │ 예: 0.85, 0.72     │           │ 예: 12.5, 8.3      │           │
-        # │   └────────────────────┘           └────────────────────┘           │
-        # │                                                                      │
-        # │   → 단순 합산 시 BM25 스코어가 결과를 지배하게 됨                     │
-        # │                                                                      │
-        # │ 해결: Min-Max 정규화로 0~1 범위 통일 후 가중치 적용                   │
-        # │                                                                      │
-        # │   정규화 공식:                                                        │
-        # │   ┌─────────────────────────────────────┐                            │
-        # │   │  normalized_score = score / max_score                            │
-        # │   └─────────────────────────────────────┘                            │
-        # │                                                                      │
-        # │   예시 (vector_weight = 0.5):                                        │
-        # │   ┌───────────────────────────────────────────────────────────────┐  │
-        # │   │ 문서 A:                                                       │  │
-        # │   │   벡터 스코어: 0.85 → 정규화: 0.85/0.85 = 1.0 → 가중: 0.5    │  │
-        # │   │   키워드 스코어: 12.5 → 정규화: 12.5/12.5 = 1.0 → 가중: 0.5  │  │
-        # │   │   최종 스코어: 0.5 + 0.5 = 1.0                                │  │
-        # │   │                                                               │  │
-        # │   │ 문서 B (벡터에서만 발견):                                      │  │
-        # │   │   벡터 스코어: 0.72 → 정규화: 0.72/0.85 = 0.847 → 가중: 0.424│  │
-        # │   │   최종 스코어: 0.424                                          │  │
-        # │   │                                                               │  │
-        # │   │ 문서 C (키워드에서만 발견):                                    │  │
-        # │   │   키워드 스코어: 8.3 → 정규화: 8.3/12.5 = 0.664 → 가중: 0.332│  │
-        # │   │   최종 스코어: 0.332                                          │  │
-        # │   └───────────────────────────────────────────────────────────────┘  │
-        # │                                                                      │
-        # │   최종 수식:                                                          │
-        # │   ┌─────────────────────────────────────────────────────────────────┐│
-        # │   │ final_score = (vec_score/max_vec x W) + (kw_score/max_kw x 1-W) ││
-        # │   │                                                                 ││
-        # │   │ 여기서 W = vector_weight (기본값 0.5)                           ││
-        # │   └─────────────────────────────────────────────────────────────────┘│
-        # └──────────────────────────────────────────────────────────────────────┘
-
-        # ═══════════════════════════════════════════════════════════════
-        # [1단계] 벡터 검색 결과 정규화 및 가중치 적용
-        # ═══════════════════════════════════════════════════════════════
-        max_vector_score = max(vector_results.scores) if vector_results.scores else 1.0
-        for doc, score in zip(
-            vector_results.documents, vector_results.scores, strict=True
+        # [1단계] 벡터 검색 결과: rank → RRF 점수
+        for rank, (doc, _) in enumerate(
+            zip(vector_results.documents, vector_results.scores, strict=True), start=1
         ):
-            # 정규화: 현재 스코어 / 최대 스코어 (0~1 범위로 변환)
-            normalized_score = score / max_vector_score
-            # 가중치 적용: 정규화 스코어 x 벡터 가중치
-            doc_scores[doc.doc_id] = (doc, normalized_score * vector_weight)
+            doc_scores[doc.doc_id] = (doc, vector_weight / (RRF_K + rank))
 
-        # ═══════════════════════════════════════════════════════════════
-        # [2단계] 키워드 검색 결과 정규화 및 가중치 적용
-        # ═══════════════════════════════════════════════════════════════
-        max_keyword_score = (
-            max(keyword_results.scores) if keyword_results.scores else 1.0
-        )
-        for doc, score in zip(
-            keyword_results.documents, keyword_results.scores, strict=True
+        # [2단계] 키워드 검색 결과: rank → RRF 점수 누적
+        for rank, (doc, _) in enumerate(
+            zip(keyword_results.documents, keyword_results.scores, strict=True), start=1
         ):
-            normalized_score = score / max_keyword_score
+            kw_rrf = (1 - vector_weight) / (RRF_K + rank)
             if doc.doc_id in doc_scores:
-                # ┌────────────────────────────────────────────────────────┐
-                # │ 두 검색 모두에서 발견된 문서: 점수 합산                  │
-                # │ → 의미적으로도 유사하고 키워드도 매칭되는 "황금 문서"   │
-                # │ → Reciprocal Rank Fusion과 유사한 효과                  │
-                # └────────────────────────────────────────────────────────┘
                 existing_doc, existing_score = doc_scores[doc.doc_id]
-                doc_scores[doc.doc_id] = (
-                    existing_doc,
-                    existing_score + normalized_score * (1 - vector_weight),
-                )
+                doc_scores[doc.doc_id] = (existing_doc, existing_score + kw_rrf)
             else:
-                # 키워드 검색에서만 발견된 문서 (정확한 용어 매칭)
-                doc_scores[doc.doc_id] = (doc, normalized_score * (1 - vector_weight))
+                doc_scores[doc.doc_id] = (doc, kw_rrf)
 
         sorted_results = sorted(doc_scores.values(), key=lambda x: x[1], reverse=True)[
             :k

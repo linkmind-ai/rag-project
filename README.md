@@ -222,22 +222,46 @@ curl -X POST http://localhost:8000/query \
 
 ## 테스트
 
-### Golden Set 테스트 결과
+### 품질 평가 결과 (2026-03-14 기준)
 
-| 지표 | 결과 |
-|------|------|
-| **Hit Rate** | **100%** (10/10) |
-| **MRR** | **1.0000** |
-| **Evidence 정확도** | **100%** |
+**Phase 1 — 검색 품질**
+
+| 지표 | 결과 | 기준 |
+|------|-----:|-----:|
+| Hit Rate @3 | **100%** | ≥ 60% |
+| Hit Rate @5 | **100%** | ≥ 70% |
+| MRR @5 | **1.000** | ≥ 0.40 |
+
+**Phase 2 — 생성 품질 (RAGAS 4개 메트릭)**
+
+| 지표 | 결과 | 기준 |
+|------|-----:|-----:|
+| Faithfulness | **85.4%** | ≥ 70% |
+| AnswerRelevancy | **81.5%** | ≥ 70% |
+| ContextPrecision | **92.8%** | ≥ 70% |
+| ContextRecall | **96.0%** | ≥ 70% |
+
+> 상세 내용: [`tests/rag_quality_report.md`](tests/rag_quality_report.md)
 
 ### 테스트 실행
 
 ```bash
-# 단위 테스트
-pytest tests/
+# .venv-eval 환경 설정 (최초 1회)
+python -m venv .venv-eval
+source .venv-eval/bin/activate
+pip install -r requirements-eval.txt
 
-# Golden Set 평가
-python tests/full_evaluation.py
+# Golden Set 자동 생성 (Ollama gemma3:4b)
+python tests/generate_golden_set.py --size 50
+
+# Phase 1: 검색 품질 평가
+pytest tests/test_search_quality.py -v
+
+# Phase 2: 생성 품질 평가 (Groq judge)
+pytest tests/test_ragas.py::TestRAGAS -v -s
+
+# Phase 2: 생성 품질 평가 (Ollama judge, rate limit 없음)
+pytest tests/test_ragas.py::TestRAGASOllama -v -s
 ```
 
 ## 프로젝트 구조
@@ -283,14 +307,17 @@ rag-project/
 
 ## 기술 스택
 
-| 분류 | 기술                  |
-|------|---------------------|
-| API Framework | FastAPI 0.109.0     |
-| Orchestration | LangGraph 0.0.20    |
-| Search Engine | Elasticsearch 9.1.5 |
-| LLM | Ollama (EXAONE 4.0) |
-| Embedding | bge-m3 (1024차원)     |
-| Data Validation | Pydantic v2         |
+| 분류 | 기술 |
+|------|------|
+| API Framework | FastAPI 0.109.0 |
+| Orchestration | LangGraph 0.0.20 |
+| Search Engine | Elasticsearch 9.1.5 (하이브리드: kNN + BM25) |
+| LLM | Ollama EXAONE-4.0-1.2B |
+| Embedding | bge-m3 (1024차원, Ollama) |
+| Data Validation | Pydantic v2 |
+| 평가 프레임워크 | RAGAS 0.4.3 (4개 메트릭) |
+| RAGAS judge | Groq llama-3.3-70b 또는 Ollama gemma3:27b |
+| Golden Set 생성 | Ollama gemma3:4b |
 
 ## 라이선스
 
