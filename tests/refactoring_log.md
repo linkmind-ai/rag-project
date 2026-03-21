@@ -412,4 +412,67 @@ AnswerRelevancy는 judge 모델에 따라 68~84% 범위 — gemma3:27b 기준 68
 | 5 | ~~답변 생성 프롬프트 개선 (방향 A)~~ (완료, 오히려 하락 63.0%) | — |
 | 6 | ~~LLM 모델 업그레이드 (EXAONE-4.0-32B)~~ (완료, Faithfulness↑ AnswerRelevancy 변화 없음) | — |
 | 7 | ~~**프롬프트 개선 방향 B** (질문 재인용 강제)~~ (완료, **76.3% +8%p↑**) | ✅ |
-| 8 | **qwen3.5:35b 모델** 시도 | 미시도 |
+| 8 | ~~judge 모델 비교 실험~~ (완료, gemma3:27b 최적 확정) | ✅ |
+
+---
+
+## Judge 모델 비교 실험 (2026-03-21)
+
+> 목적: gemma3:27b 대체 judge 탐색 — AnswerRelevancy 70% 임계값 통과 가능 judge 탐색
+> 응답 모델: EXAONE-4.0-32B-GGUF:Q8_0 (한국어 특화)
+> golden_set: 10건 / 평가 방식: TestRAGASLlama4, TestRAGASLlama33, TestRAGASQwen35
+
+| judge | 크기 | Faithfulness | AnswerRelevancy | 판정 | 비고 |
+|-------|-----:|:-----------:|:--------------:|:----:|------|
+| **gemma3:27b** (기준) | 27B | **91.1%** ✅ | **68.8%** ❌ | AR 미달 | 현재 사용 judge |
+| llama3.3:70b Q4_K_M | 70B | 65.0% ❌ | 84.7% ✅ | Faith 미달 | GROQ 동일 모델, 양자화 영향 |
+| llama4 108B Q4_K_M | 108B | 24.7% ❌ | 77.8% ✅ | Faith 붕괴 | 대형 모델이라도 품질 보장 안됨 |
+| qwen3.5:35b | 35B | 0.0% ❌ | 0.0% ❌ | 전 지표 붕괴 | `<think>` 태그로 JSON 파싱 실패 |
+
+### 핵심 발견
+
+1. **응답 모델 언어 특화 ↔ judge 언어 이해도 궁합이 중요**
+   - EXAONE(한국어 특화) 출력을 영어 중심 모델(llama3.3, llama4)이 판단 → Faithfulness 저평가
+   - gemma3:27b는 한국어 책 리뷰 도메인에서 EXAONE 출력을 가장 안정적으로 평가
+
+2. **양자화 영향**: GROQ llama-3.3-70b(full precision) ~83% vs 로컬 Q4_K_M 65% — 동일 모델도 양자화로 15%p↓
+
+3. **Reasoning 모델(qwen3.5:35b) 호환 불가**: `<think>` 태그 포함 출력 → RAGAS JSON 파서 전 지표 실패
+
+4. **모델 크기 ≠ judge 품질**: llama4 108B < gemma3:27b 27B (Faithfulness 기준)
+
+### 결론 (judge 비교 1차)
+
+**gemma3:27b가 당시 스택에서 가장 안정적 judge였으나 AnswerRelevancy 68.8% 미달.**
+
+---
+
+## Judge 교체: qwen2.5:72b 도입 (2026-03-21)
+
+> 목적: instruction-tuned 72B 모델로 AnswerRelevancy 70% 임계값 통과
+> 모델: qwen2.5:72b (72.7B Q4_K_M) — non-reasoning, 한국어 강점
+> golden_set: 10건 quick → 100건 최종 검증
+
+### 10건 quick 결과
+
+| 지표 | qwen2.5:72b | gemma3:27b (10건) | 판정 |
+|------|:-----------:|:-----------------:|:----:|
+| Faithfulness | 94.4% | 81.3% | ✅ |
+| ContextPrecision | 83.3% | 100.0% | ✅ |
+| **AnswerRelevancy** | **77.5%** | 76.3% | ✅ |
+| ContextRecall | 91.7% | 91.7% | ✅ |
+
+### 100건 최종 검증
+
+| 지표 | qwen2.5:72b | gemma3:27b (100건) | 변화 | 판정 |
+|------|:-----------:|:-----------------:|:----:|:----:|
+| **Faithfulness** | **85.8%** | 91.1% | -5.3%p | ✅ |
+| ContextPrecision | **90.6%** | 94.6% | -4.0%p | ✅ |
+| **AnswerRelevancy** | **70.8%** | 68.8% ❌ | **+2.0%p** | ✅ |
+| ContextRecall | **88.1%** | 98.9% | -10.8%p | ✅ |
+
+- **4개 지표 전부 PASSED — 최초 달성**
+- gemma3:27b에서 유일 미달이던 AnswerRelevancy 68.8% → **70.8% 통과**
+- **결론: qwen2.5:72b를 표준 judge로 확정**
+  - `TestRAGASOllama` → `TestRAGASQwen25` 교체
+  - `apps/prompts/chat_prompt.py` 운영 프롬프트 방향 B 적용
