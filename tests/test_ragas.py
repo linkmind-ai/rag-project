@@ -77,11 +77,44 @@ import math
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import re
+
 import pytest
 
 if TYPE_CHECKING:
     from langchain_community.llms import Ollama
     from langchain_groq import ChatGroq
+
+
+def _make_no_think_ollama(**kwargs: object) -> object:
+    """
+    Reasoning 모델(qwen3 등)의 <think>...</think> 태그를 생성 레벨에서 제거하는
+    ChatOllama 서브클래스를 동적으로 생성해 반환한다.
+
+    LangchainLLMWrapper는 _generate/_agenerate를 직접 호출하므로
+    invoke/ainvoke 래퍼로는 우회되지 않음 → 서브클래싱으로 해결.
+    """
+    from langchain_ollama import ChatOllama
+
+    class _ChatOllamaNoThink(ChatOllama):  # type: ignore[misc]
+        @staticmethod
+        def _strip(text: str) -> str:
+            return re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+        def _generate(self, messages: object, stop: object = None, run_manager: object = None, **kw: object) -> object:
+            result = super()._generate(messages, stop=stop, run_manager=run_manager, **kw)
+            for gen in result.generations:
+                gen.message.content = self._strip(gen.message.content)
+            return result
+
+        async def _agenerate(self, messages: object, stop: object = None, run_manager: object = None, **kw: object) -> object:
+            result = await super()._agenerate(messages, stop=stop, run_manager=run_manager, **kw)
+            for gen in result.generations:
+                gen.message.content = self._strip(gen.message.content)
+            return result
+
+    return _ChatOllamaNoThink(**kwargs)
+
 
 # ragas 미설치 시 모듈 전체 스킵
 pytest.importorskip(
@@ -546,6 +579,486 @@ class TestRAGASOllama:
             f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달.\n"
             "  → 1) 검색 k값 증가로 더 많은 청크 포함\n"
             "  → 2) 청크 분할 크기 조정 (CHUNK_SIZE/OVERLAP)"
+        )
+
+
+# ── TestRAGASLlama4 ───────────────────────────────────────────────────────────
+
+class TestRAGASLlama4:
+    """
+    Ollama llama4:latest (108B Q4_K_M) judge로 4개 메트릭 측정.
+
+    gemma3:27b 대비 더 큰 모델로 한국어 이해도 및 AnswerRelevancy 점수 차이 비교.
+
+    실행:
+        pytest tests/test_ragas.py::TestRAGASLlama4 -v -s
+    """
+
+    @pytest.fixture(scope="class")
+    def llama4_judge_llm(self) -> object:
+        """llama4:latest judge LLM."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
+        from common.config import settings
+        from langchain_ollama import ChatOllama
+
+        return ChatOllama(
+            base_url=settings.OLLAMA_BASE_URL,
+            model="llama4:latest",
+            temperature=0,
+            num_predict=512,
+            client_kwargs={"headers": {
+                "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+            }},
+        )
+
+    @pytest.fixture(scope="class")
+    def ragas_dataset(self) -> object:
+        """class scope: 두 테스트에서 Dataset 1회 생성 재사용."""
+        golden_set = json.loads(_GOLDEN_SET_PATH.read_text(encoding="utf-8"))
+        print(f"\n  📊 RAGAS Dataset 생성 중... ({len(golden_set)}개 쿼리, Ollama 답변 생성)")
+        return asyncio.run(_build_ragas_dataset(golden_set))
+
+    def test_retrieval_metrics(
+        self,
+        ragas_dataset: object,
+        llama4_judge_llm: object,
+    ) -> None:
+        """
+        [llama4] Faithfulness + ContextPrecision 측정.
+        """
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import ContextPrecision, Faithfulness
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(llama4_judge_llm)
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=1),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        f_score = _ragas_score(result, "faithfulness")
+        cp_score = _ragas_score(result, "context_precision")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama llama4:latest] 평가 샘플 수 : {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        _save_result(ragas_dataset, {"faithfulness": f_score, "context_precision": cp_score})
+
+        assert f_score >= _FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness = {f_score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달."
+        )
+        assert cp_score >= _CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision = {cp_score:.1%} — 목표 {_CONTEXT_PRECISION_THRESHOLD:.0%} 미달."
+        )
+
+    def test_generation_metrics(
+        self,
+        ragas_dataset: object,
+        llama4_judge_llm: object,
+    ) -> None:
+        """
+        [llama4] AnswerRelevancy + ContextRecall 측정.
+        """
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import AnswerRelevancy, ContextRecall
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(llama4_judge_llm)
+        ragas_embeddings = _build_ragas_embeddings()
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                AnswerRelevancy(
+                    llm=ragas_llm,
+                    embeddings=ragas_embeddings,
+                    strictness=1,
+                ),
+                ContextRecall(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            embeddings=ragas_embeddings,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        ar_score = _ragas_score(result, "answer_relevancy")
+        cr_score = _ragas_score(result, "context_recall")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama llama4:latest] 평가 샘플 수 : {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
+
+        _save_result(ragas_dataset, {"answer_relevancy": ar_score, "context_recall": cr_score})
+
+        assert ar_score >= _ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy = {ar_score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달."
+        )
+        assert cr_score >= _CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달."
+        )
+
+
+# ── TestRAGASLlama33 ──────────────────────────────────────────────────────────
+
+class TestRAGASLlama33:
+    """
+    Ollama llama3.3:70b (70.6B Q4_K_M) judge로 4개 메트릭 측정.
+
+    GROQ llama-3.3-70b와 동일 모델 — rate limit 없이 로컬 실행.
+    GROQ 기준 AnswerRelevancy ~83% 기대.
+
+    실행:
+        pytest tests/test_ragas.py::TestRAGASLlama33 -v -s
+    """
+
+    @pytest.fixture(scope="class")
+    def llama33_judge_llm(self) -> object:
+        """llama3.3:70b judge LLM."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
+        from common.config import settings
+        from langchain_ollama import ChatOllama
+
+        return ChatOllama(
+            base_url=settings.OLLAMA_BASE_URL,
+            model="llama3.3:70b",
+            temperature=0,
+            num_predict=512,
+            client_kwargs={"headers": {
+                "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+            }},
+        )
+
+    @pytest.fixture(scope="class")
+    def ragas_dataset(self) -> object:
+        """class scope: 두 테스트에서 Dataset 1회 생성 재사용."""
+        golden_set = json.loads(_GOLDEN_SET_PATH.read_text(encoding="utf-8"))
+        print(f"\n  📊 RAGAS Dataset 생성 중... ({len(golden_set)}개 쿼리, Ollama 답변 생성)")
+        return asyncio.run(_build_ragas_dataset(golden_set))
+
+    def test_retrieval_metrics(self, ragas_dataset: object, llama33_judge_llm: object) -> None:
+        """[llama3.3:70b] Faithfulness + ContextPrecision 측정."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import ContextPrecision, Faithfulness
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(llama33_judge_llm)
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=1),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        f_score = _ragas_score(result, "faithfulness")
+        cp_score = _ragas_score(result, "context_precision")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama llama3.3:70b] 평가 샘플 수 : {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        _save_result(ragas_dataset, {"faithfulness": f_score, "context_precision": cp_score})
+
+        assert f_score >= _FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness = {f_score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달."
+        )
+        assert cp_score >= _CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision = {cp_score:.1%} — 목표 {_CONTEXT_PRECISION_THRESHOLD:.0%} 미달."
+        )
+
+    def test_generation_metrics(self, ragas_dataset: object, llama33_judge_llm: object) -> None:
+        """[llama3.3:70b] AnswerRelevancy + ContextRecall 측정."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import AnswerRelevancy, ContextRecall
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(llama33_judge_llm)
+        ragas_embeddings = _build_ragas_embeddings()
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                AnswerRelevancy(
+                    llm=ragas_llm,
+                    embeddings=ragas_embeddings,
+                    strictness=1,
+                ),
+                ContextRecall(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            embeddings=ragas_embeddings,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        ar_score = _ragas_score(result, "answer_relevancy")
+        cr_score = _ragas_score(result, "context_recall")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama llama3.3:70b] 평가 샘플 수 : {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
+
+        _save_result(ragas_dataset, {"answer_relevancy": ar_score, "context_recall": cr_score})
+
+        assert ar_score >= _ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy = {ar_score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달."
+        )
+        assert cr_score >= _CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달."
+        )
+
+
+# ── TestRAGASQwen35 ───────────────────────────────────────────────────────────
+
+class TestRAGASQwen35:
+    """
+    Ollama qwen3.5:35b judge로 4개 메트릭 측정.
+
+    한국어 강점 + 구조화 출력 우수 — gemma3:27b 대비 AnswerRelevancy 비교.
+
+    실행:
+        pytest tests/test_ragas.py::TestRAGASQwen35 -v -s
+    """
+
+    @pytest.fixture(scope="class")
+    def qwen35_judge_llm(self) -> object:
+        """qwen3.5:35b judge LLM — _generate 레벨에서 <think> 태그 제거."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
+        from common.config import settings
+
+        return _make_no_think_ollama(
+            base_url=settings.OLLAMA_BASE_URL,
+            model="qwen3.5:35b",
+            temperature=0,
+            # thinking 토큰 ~1600개 소비 → 512면 content 출력 전 종료됨 → 2000으로 확보
+            num_predict=2000,
+            client_kwargs={"headers": {
+                "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+            }},
+        )
+
+    @pytest.fixture(scope="class")
+    def ragas_dataset(self) -> object:
+        """class scope: 두 테스트에서 Dataset 1회 생성 재사용."""
+        golden_set = json.loads(_GOLDEN_SET_PATH.read_text(encoding="utf-8"))
+        print(f"\n  📊 RAGAS Dataset 생성 중... ({len(golden_set)}개 쿼리, Ollama 답변 생성)")
+        return asyncio.run(_build_ragas_dataset(golden_set))
+
+    def test_retrieval_metrics(self, ragas_dataset: object, qwen35_judge_llm: object) -> None:
+        """[qwen3.5:35b] Faithfulness + ContextPrecision 측정."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import ContextPrecision, Faithfulness
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(qwen35_judge_llm)
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=1),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        f_score = _ragas_score(result, "faithfulness")
+        cp_score = _ragas_score(result, "context_precision")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama qwen3.5:35b] 평가 샘플 수 : {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        _save_result(ragas_dataset, {"faithfulness": f_score, "context_precision": cp_score})
+
+        assert f_score >= _FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness = {f_score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달."
+        )
+        assert cp_score >= _CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision = {cp_score:.1%} — 목표 {_CONTEXT_PRECISION_THRESHOLD:.0%} 미달."
+        )
+
+    def test_generation_metrics(self, ragas_dataset: object, qwen35_judge_llm: object) -> None:
+        """[qwen3.5:35b] AnswerRelevancy + ContextRecall 측정."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import AnswerRelevancy, ContextRecall
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(qwen35_judge_llm)
+        ragas_embeddings = _build_ragas_embeddings()
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                AnswerRelevancy(
+                    llm=ragas_llm,
+                    embeddings=ragas_embeddings,
+                    strictness=1,
+                ),
+                ContextRecall(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            embeddings=ragas_embeddings,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        ar_score = _ragas_score(result, "answer_relevancy")
+        cr_score = _ragas_score(result, "context_recall")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama qwen3.5:35b] 평가 샘플 수 : {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
+
+        _save_result(ragas_dataset, {"answer_relevancy": ar_score, "context_recall": cr_score})
+
+        assert ar_score >= _ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy = {ar_score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달."
+        )
+        assert cr_score >= _CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달."
+        )
+
+
+# ── TestRAGASQwen25 ───────────────────────────────────────────────────────────
+
+class TestRAGASQwen25:
+    """
+    Ollama qwen2.5:72b (72.7B Q4_K_M) judge로 4개 메트릭 측정.
+
+    - instruction-tuned 모델 (non-reasoning) — thinking 토큰 없음
+    - 한국어 이해도 강함 (qwen 계열 다국어 특화)
+    - gemma3:27b 대비 AnswerRelevancy 점수 비교
+
+    실행:
+        pytest tests/test_ragas.py::TestRAGASQwen25 -v -s
+    """
+
+    @pytest.fixture(scope="class")
+    def qwen25_judge_llm(self) -> object:
+        """qwen2.5:72b judge LLM."""
+        import sys
+        sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
+        from common.config import settings
+        from langchain_ollama import ChatOllama
+
+        return ChatOllama(
+            base_url=settings.OLLAMA_BASE_URL,
+            model="qwen2.5:72b",
+            temperature=0,
+            num_predict=512,
+            client_kwargs={"headers": {
+                "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+                "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+            }},
+        )
+
+    @pytest.fixture(scope="class")
+    def ragas_dataset(self) -> object:
+        """class scope: 두 테스트에서 Dataset 1회 생성 재사용."""
+        golden_set = json.loads(_GOLDEN_SET_PATH.read_text(encoding="utf-8"))
+        print(f"\n  📊 RAGAS Dataset 생성 중... ({len(golden_set)}개 쿼리, Ollama 답변 생성)")
+        return asyncio.run(_build_ragas_dataset(golden_set))
+
+    def test_retrieval_metrics(self, ragas_dataset: object, qwen25_judge_llm: object) -> None:
+        """[qwen2.5:72b] Faithfulness + ContextPrecision 측정."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import ContextPrecision, Faithfulness
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(qwen25_judge_llm)
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=1),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        f_score = _ragas_score(result, "faithfulness")
+        cp_score = _ragas_score(result, "context_precision")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama qwen2.5:72b] 평가 샘플 수 : {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        _save_result(ragas_dataset, {"faithfulness": f_score, "context_precision": cp_score})
+
+        assert f_score >= _FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness = {f_score:.1%} — 목표 {_FAITHFULNESS_THRESHOLD:.0%} 미달."
+        )
+        assert cp_score >= _CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision = {cp_score:.1%} — 목표 {_CONTEXT_PRECISION_THRESHOLD:.0%} 미달."
+        )
+
+    def test_generation_metrics(self, ragas_dataset: object, qwen25_judge_llm: object) -> None:
+        """[qwen2.5:72b] AnswerRelevancy + ContextRecall 측정."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import AnswerRelevancy, ContextRecall
+        from ragas.run_config import RunConfig
+
+        ragas_llm = LangchainLLMWrapper(qwen25_judge_llm)
+        ragas_embeddings = _build_ragas_embeddings()
+
+        result = evaluate(
+            dataset=ragas_dataset,
+            metrics=[
+                AnswerRelevancy(
+                    llm=ragas_llm,
+                    embeddings=ragas_embeddings,
+                    strictness=1,
+                ),
+                ContextRecall(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            embeddings=ragas_embeddings,
+            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        )
+
+        ar_score = _ragas_score(result, "answer_relevancy")
+        cr_score = _ragas_score(result, "context_recall")
+        n = len(ragas_dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [Ollama qwen2.5:72b] 평가 샘플 수 : {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
+
+        _save_result(ragas_dataset, {"answer_relevancy": ar_score, "context_recall": cr_score})
+
+        assert ar_score >= _ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy = {ar_score:.1%} — 목표 {_ANSWER_RELEVANCY_THRESHOLD:.0%} 미달."
+        )
+        assert cr_score >= _CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall = {cr_score:.1%} — 목표 {_CONTEXT_RECALL_THRESHOLD:.0%} 미달."
         )
 
 
