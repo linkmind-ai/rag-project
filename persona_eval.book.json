@@ -1,0 +1,16 @@
+{
+  "preferred_topics": [
+    "literature",
+    "book reviews",
+    "science fiction",
+    "themes",
+    "plot"
+  ],
+  "response_style": "evidence_first",
+  "explicit_notes": [
+    "Answer in concise Korean.",
+    "Use retrieved evidence before interpretation.",
+    "Distinguish plot summary from critical interpretation.",
+    "When unsure, stay close to the retrieved text."
+  ]
+}

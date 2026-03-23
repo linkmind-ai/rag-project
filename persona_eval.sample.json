@@ -1,0 +1,10 @@
+{
+  "preferred_topics": ["literature", "book reviews", "science fiction"],
+  "avoid_topics": ["politics"],
+  "response_style": "evidence_first",
+  "factuality_bias": 0.8,
+  "explicit_notes": [
+    "Answer with short supporting evidence from the retrieved text.",
+    "Prefer concise Korean explanations."
+  ]
+}

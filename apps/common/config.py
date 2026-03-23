@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     # API
     API_HOST: str = Field(default="0.0.0.0")
     API_PORT: int = Field(default=8000)
+    API_RELOAD: bool = Field(default=False)
     MAX_CONCURRENT_REQUESTS: int = Field(default=5)
 
     # RAG base

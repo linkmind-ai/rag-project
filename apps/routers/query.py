@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import json
 import time
 from collections.abc import AsyncGenerator
@@ -35,11 +35,8 @@ async def query(request: QueryRequest) -> QueryResponse:
                     "metadata": doc.metadata,
                     "is_evidence": True,
                 }
-                for idx, doc in zip(
-                    response["evidence_indices"], response["evidence_docs"], strict=True
-                )
+                for idx, doc in enumerate(response["retrieved_docs"])
             ]
-            sources.sort(key=lambda x: x["index"])
 
             return QueryResponse(
                 session_id=request.session_id,

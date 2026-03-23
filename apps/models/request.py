@@ -58,3 +58,15 @@ class FeedbackRequest(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(frozen=False)
+
+
+class SessionProfileUpdateRequest(BaseModel):
+    """Direct session profile update request model."""
+
+    preferred_topics: list[str] | None = Field(default=None)
+    avoid_topics: list[str] | None = Field(default=None)
+    response_style: str | None = Field(default=None)
+    factuality_bias: float | None = Field(default=None, ge=0.0, le=1.0)
+    explicit_notes: list[str] | None = Field(default=None)
+
+    model_config = ConfigDict(frozen=False)

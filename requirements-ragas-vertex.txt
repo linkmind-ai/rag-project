@@ -1,0 +1,7 @@
+ragas>=0.4.0
+google-genai>=1.0.0
+datasets>=2.16.0
+httpx>=0.26.0
+pandas>=2.0.0
+python-dotenv>=1.0.0
+jsonref>=1.1.0

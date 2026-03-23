@@ -1,6 +1,7 @@
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
+from models.request import SessionProfileUpdateRequest
 from stores.memory_store import memory_store
 
 router = APIRouter(prefix="/session", tags=["session"])
@@ -56,6 +57,29 @@ async def get_session_profile(session_id: str) -> dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"프로필 조회 오류 발생: {e!s}",
+        ) from e
+
+
+@router.post("/{session_id}/profile")
+async def update_session_profile(
+    session_id: str, request: SessionProfileUpdateRequest
+) -> dict[str, Any]:
+    """Update session persona/profile directly."""
+    try:
+        updates = {
+            key: value
+            for key, value in request.model_dump().items()
+            if value is not None
+        }
+        profile = await memory_store.update_user_profile(session_id, updates)
+        return {
+            "session_id": session_id,
+            "profile": profile,
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"프로필 업데이트 오류 발생: {e!s}",
         ) from e
 
 

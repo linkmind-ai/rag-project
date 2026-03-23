@@ -21,9 +21,13 @@ from typing import Any
 import urllib3
 from common.config import settings
 from elasticsearch import AsyncElasticsearch
-from langchain_community.embeddings import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from models.state import Document, RetrievedContext
+
+try:
+    from langchain_ollama import OllamaEmbeddings
+except ImportError:
+    from langchain_community.embeddings import OllamaEmbeddings
 
 # Cloudflared 터널 환경에서 SSL 인증서 검증 경고 억제
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)

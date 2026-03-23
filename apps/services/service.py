@@ -1,4 +1,4 @@
-﻿import asyncio
+import asyncio
 import logging
 import time
 from collections.abc import AsyncGenerator
@@ -45,14 +45,8 @@ class RAGService:
         result = await graph.ainvoke(initial_state.model_dump())
 
         answer = result.get("answer", "")
-        evidence_indices = result.get("evidence_indices", [])
         retrieved_docs = result.get("retrieved_docs", [])
-
-        evidence_docs = [
-            retrieved_docs[idx]
-            for idx in evidence_indices
-            if isinstance(idx, int) and 0 <= idx < len(retrieved_docs)
-        ]
+        retrieval_scores = result.get("retrieval_scores", [])
 
         await memory_store.add_message(session_id, "user", query)
         await memory_store.add_message(session_id, "assistant", answer)
@@ -60,26 +54,23 @@ class RAGService:
         elapsed_time = time.time() - start_time
 
         meta = {
-            "transparency": self._normalize(result.get("transparency", {})),
-            "route": self._normalize(result.get("route", {})),
             "selfrag_scores": self._normalize(result.get("selfrag_scores", {})),
             "loop_count": result.get("loop_count", 0),
             "is_sufficient": result.get("is_sufficient", False),
             "last_retrieval_query": result.get("last_retrieval_query", ""),
+            "retrieval_scores": self._normalize(retrieval_scores),
         }
 
         logger.info(
-            "[RAGService] process_query done session=%s docs=%s evidence=%s elapsed=%.2fs",
+            "[RAGService] process_query done session=%s docs=%s elapsed=%.2fs",
             session_id,
             len(retrieved_docs),
-            len(evidence_indices),
             elapsed_time,
         )
 
         return {
             "answer": answer,
-            "evidence_indices": evidence_indices,
-            "evidence_docs": evidence_docs,
+            "retrieved_docs": retrieved_docs,
             "all_docs": retrieved_docs,
             "elapsed_time": elapsed_time,
             "meta": meta,
@@ -118,7 +109,6 @@ class RAGService:
             graph = rag_graph.get_graph()
             full_response = ""
             retrieved_docs = []
-            evidence_indices = []
             latest_meta: dict[str, Any] = {}
 
             async for event in graph.astream_events(
@@ -133,85 +123,56 @@ class RAGService:
                         "type": "retrieve_start",
                         "message": "Document retrieval started",
                     }
-                    yield {
-                        "type": "persona_start",
-                        "message": "Building persona evidence bundle",
-                    }
 
                 elif event_type == "on_chain_end" and name == "build_persona_bundle":
                     output = data.get("output", {})
                     retrieved_docs = output.get("retrieved_docs", [])
+                    latest_meta["retrieval_scores"] = output.get("retrieval_scores", [])
+                    latest_meta["last_retrieval_query"] = output.get(
+                        "last_retrieval_query", ""
+                    )
                     yield {
                         "type": "retrieve_end",
                         "message": f"Retrieved {len(retrieved_docs)} documents",
                         "doc_count": len(retrieved_docs),
                     }
-                    yield {"type": "persona_end", "doc_count": len(retrieved_docs)}
 
-                elif event_type == "on_chain_start" and name == "generate_draft":
-                    yield {"type": "generate_start", "message": "Generating draft"}
-
-                elif event_type == "on_chain_end" and name == "generate_draft":
-                    output = data.get("output", {})
-                    full_response = output.get("answer", "") or output.get(
-                        "draft_answer", ""
-                    )
-                    if full_response:
-                        yield {"type": "content", "content": full_response}
+                elif event_type == "on_chain_start" and name == "self_critique":
                     yield {
-                        "type": "generate_end",
-                        "message": "Draft generation completed",
+                        "type": "self_critique_start",
+                        "message": "Generating answer and checking sufficiency",
                     }
 
                 elif event_type == "on_chain_end" and name == "self_critique":
                     output = data.get("output", {})
+                    full_response = output.get("answer", "") or full_response
                     scores = output.get("selfrag_scores")
                     if hasattr(scores, "model_dump"):
                         scores = scores.model_dump()
                     latest_meta["selfrag_scores"] = scores
-                    yield {"type": "self_critique_end", "scores": scores}
-
-                elif event_type == "on_chain_start" and name == "reinforce_retrieve":
+                    latest_meta["is_sufficient"] = output.get("is_sufficient", False)
+                    if full_response:
+                        yield {"type": "content", "content": full_response}
                     yield {
-                        "type": "reinforce_start",
-                        "message": "Evidence reinforcement triggered",
+                        "type": "self_critique_end",
+                        "scores": scores,
+                        "is_sufficient": output.get("is_sufficient", False),
                     }
 
-                elif event_type == "on_chain_end" and name == "reinforce_retrieve":
+                elif event_type == "on_chain_end" and name == "check_sufficiency":
                     output = data.get("output", {})
-                    loop_count = output.get("loop_count")
-                    latest_meta["loop_count"] = loop_count
-                    yield {"type": "reinforce_end", "loop_count": loop_count}
-
-                elif event_type == "on_chain_end" and name == "finalize_response":
-                    output = data.get("output", {})
-                    full_response = output.get("answer", full_response)
-                    transparency = output.get("transparency", {})
-                    latest_meta["transparency"] = transparency
-                    yield {"type": "finalize", "transparency": transparency}
-
-                elif event_type == "on_chain_start" and name == "identify_evidence":
-                    yield {"type": "evidence_start", "message": "Identifying evidence"}
-
-                elif event_type == "on_chain_end" and name == "identify_evidence":
-                    output = data.get("output", {})
-                    evidence_indices = output.get("evidence_indices", [])
-                    docs = output.get("retrieved_docs", retrieved_docs)
-                    evidence_docs = [
-                        {
-                            "index": idx,
-                            "content": docs[idx].content,
-                            "metadata": docs[idx].metadata,
+                    latest_meta["loop_count"] = output.get(
+                        "loop_count", latest_meta.get("loop_count", 0)
+                    )
+                    latest_meta["is_sufficient"] = output.get(
+                        "is_sufficient", latest_meta.get("is_sufficient", False)
+                    )
+                    if output.get("next_action") == "retry":
+                        yield {
+                            "type": "retry",
+                            "loop_count": output.get("loop_count", 0),
+                            "next_query": output.get("next_query", query),
                         }
-                        for idx in evidence_indices
-                        if isinstance(idx, int) and 0 <= idx < len(docs)
-                    ]
-                    yield {
-                        "type": "evidence_end",
-                        "message": f"Found {len(evidence_indices)} evidence documents",
-                        "evidence_indices": evidence_indices,
-                        "evidence_docs": evidence_docs,
-                    }
 
             await memory_store.add_message(session_id, "user", query)
             await memory_store.add_message(session_id, "assistant", full_response)
@@ -220,8 +181,16 @@ class RAGService:
             yield {
                 "type": "done",
                 "full_response": full_response,
-                "evidence_indices": evidence_indices,
                 "elapsed_time": elapsed_time,
+                "sources": [
+                    {
+                        "index": idx,
+                        "content": doc.content,
+                        "metadata": doc.metadata,
+                        "is_evidence": True,
+                    }
+                    for idx, doc in enumerate(retrieved_docs)
+                ],
                 "meta": latest_meta,
             }
 

@@ -7,7 +7,6 @@ from types import TracebackType
 from typing import Any
 
 from common.config import settings
-from langchain_community.llms import Ollama
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from models.state import Document, GraphState, Message, SelfRagScores
@@ -16,10 +15,15 @@ from prompts.selfrag_critique_prompt import _SELFRAG_CRITIQUE_PROMPT
 from stores.memory_store import memory_store
 from stores.vector_store import elasticsearch_store
 
+try:
+    from langchain_ollama import OllamaLLM
+except ImportError:
+    from langchain_community.llms import Ollama as OllamaLLM
+
 
 class RAGGraph:
     def __init__(self) -> None:
-        self._llm: Ollama | None = None
+        self._llm: OllamaLLM | None = None
         self._graph: CompiledStateGraph | None = None
         self._initialized = False
         self._lock = asyncio.Lock()
@@ -44,7 +48,7 @@ class RAGGraph:
         async with self._lock:
             if self._initialized:
                 return
-            self._llm = Ollama(
+            self._llm = OllamaLLM(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.OLLAMA_MODEL,
                 headers=settings.get_ollama_headers(),
