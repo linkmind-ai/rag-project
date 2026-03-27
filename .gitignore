@@ -51,7 +51,9 @@ tests/eval_result.json
 # Logs
 *.log
 logs/
-.benchmarks/
+.benchmarks/*
+!.benchmarks/*.csv
+!.benchmarks/*_summary.json
 
 # Uploads
 uploads/
