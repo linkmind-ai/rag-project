@@ -3,25 +3,39 @@ import json
 import requests
 import sys
 
-def get_pr_details():
+def get_event_details():
     event_path = os.getenv('GITHUB_EVENT_PATH')
+    event_name = os.getenv('GITHUB_EVENT_NAME')
+    repo = os.getenv('GITHUB_REPOSITORY')
+    
     if not event_path or not os.path.exists(event_path):
-        print("Not a GitHub PR event or GITHUB_EVENT_PATH missing.")
-        return None, None
+        print("GITHUB_EVENT_PATH missing.")
+        return None, None, None, None
         
     with open(event_path, 'r', encoding='utf-8') as f:
         event = json.load(f)
         
-    if 'pull_request' not in event:
-        print("Not a pull_request event.")
-        return None, None
-        
-    pr_number = event['pull_request']['number']
-    repo = os.getenv('GITHUB_REPOSITORY')
-    return repo, pr_number
+    if event_name == 'pull_request':
+        return 'pull_request', repo, event['pull_request']['number'], None
+    elif event_name == 'push':
+        before = event.get('before')
+        after = event.get('after')
+        return 'push', repo, before, after
+    else:
+        return event_name, repo, None, None
 
 def get_pr_diff(repo, pr_number, token):
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.diff"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return response.text
+
+def get_push_diff(repo, before, after, token):
+    url = f"https://api.github.com/repos/{repo}/compare/{before}...{after}"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.diff"
@@ -43,7 +57,6 @@ def analyze_code_with_llm(diff_text):
 [Git Diff 끝]
 """
 
-    # Local Ollama or Groq API Configuration
     ollama_host = os.getenv('OLLAMA_HOST')
     ollama_model = os.getenv('OLLAMA_MODEL', 'hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0')
     groq_api_key = os.getenv('GROQ_API_KEY')
@@ -71,7 +84,7 @@ def analyze_code_with_llm(diff_text):
             "Content-Type": "application/json"
         }
         payload = {
-            "model": "llama3-8b-8192", # Default groq model or adjust as needed
+            "model": "llama3-8b-8192",
             "messages": [
                 {"role": "system", "content": "You are an expert code reviewer. Respond in Korean."},
                 {"role": "user", "content": prompt}
@@ -82,7 +95,7 @@ def analyze_code_with_llm(diff_text):
         return resp.json()['choices'][0]['message']['content']
         
     else:
-        raise ValueError("Neither OLLAMA_HOST nor GROQ_API_KEY environment variables are set. Please configure the LLM provider.")
+        raise ValueError("Neither OLLAMA_HOST nor GROQ_API_KEY are set.")
 
 def post_pr_comment(repo, pr_number, token, comment_body):
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
@@ -90,12 +103,21 @@ def post_pr_comment(repo, pr_number, token, comment_body):
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"
     }
-    payload = {
-        "body": comment_body
-    }
+    payload = {"body": comment_body}
     response = requests.post(url, headers=headers, json=payload)
     response.raise_for_status()
-    print("Comment posted successfully!")
+    print("PR Comment posted successfully!")
+
+def post_commit_comment(repo, commit_sha, token, comment_body):
+    url = f"https://api.github.com/repos/{repo}/commits/{commit_sha}/comments"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json"
+    }
+    payload = {"body": comment_body}
+    response = requests.post(url, headers=headers, json=payload)
+    response.raise_for_status()
+    print("Commit Comment posted successfully!")
 
 def main():
     token = os.getenv('GITHUB_TOKEN')
@@ -103,14 +125,28 @@ def main():
         print("GITHUB_TOKEN is missing")
         sys.exit(1)
         
-    repo, pr_number = get_pr_details()
-    if not repo or not pr_number:
-        print("Skipping code review, this script is currently designed to run on PR events.")
+    event_name, repo, arg1, arg2 = get_event_details()
+    if not event_name or not repo:
+        print("Could not determine event details.")
         sys.exit(0)
         
-    print(f"Fetching diff for {repo} PR #{pr_number}...")
     try:
-        diff_text = get_pr_diff(repo, pr_number, token)
+        if event_name == 'pull_request':
+            pr_number = arg1
+            print(f"Fetching diff for PR #{pr_number}...")
+            diff_text = get_pr_diff(repo, pr_number, token)
+        elif event_name == 'push':
+            before, after = arg1, arg2
+            if not before or not after or before.replace('0', '') == '':
+                # Using the single commit diff if before is 000000 or missing
+                diff_text = get_push_diff(repo, after + "^", after, token)
+            else:
+                print(f"Fetching diff for push {before}...{after}...")
+                diff_text = get_push_diff(repo, before, after, token)
+        else:
+            print(f"Skipping code review for event: {event_name}")
+            sys.exit(0)
+            
         if not diff_text or len(diff_text.strip()) == 0:
             print("No visible changes to review.")
             sys.exit(0)
@@ -118,10 +154,14 @@ def main():
         print("Analyzing with LLM...")
         analysis_result = analyze_code_with_llm(diff_text)
         
-        print("Posting result to GitHub PR...")
         review_comment = f"## 🤖 AI Code Review Agent (코드 리뷰 리포트)\n\n{analysis_result}"
-        post_pr_comment(repo, pr_number, token, review_comment)
         
+        print("Posting result to GitHub...")
+        if event_name == 'pull_request':
+            post_pr_comment(repo, arg1, token, review_comment)
+        elif event_name == 'push':
+            post_commit_comment(repo, arg2, token, review_comment)
+            
     except Exception as e:
         print(f"Error during code review: {e}")
         sys.exit(1)
