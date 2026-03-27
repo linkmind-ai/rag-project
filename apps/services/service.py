@@ -222,7 +222,6 @@ class RAGService:
         """
         # 처리 시간 측정 시작
         start_time = time.time()
-
         await self.initialize()
 
         # 대화 이력 로드 (선택적)
@@ -261,6 +260,8 @@ class RAGService:
 
         # 결과 추출
         answer = result["answer"]
+        hypothetical_doc = result.get("hypothetical_doc", "")
+        web_search = result.get("web_search", False)
         evidence_indices = result.get("evidence_indices", [])
         retrieved_docs = result.get("retrieved_docs", [])
 
@@ -285,6 +286,8 @@ class RAGService:
 
         return {
             "answer": answer,
+            "hypothetical_doc": hypothetical_doc,
+            "web_search": web_search,
             "evidence_indices": evidence_indices,
             "evidence_docs": evidence_docs,
             "all_docs": retrieved_docs,
@@ -398,6 +401,7 @@ class RAGService:
             full_response = ""
             retrieved_docs = []
             evidence_indices = []
+            web_search = False
 
             # ┌─────────────────────────────────────────────────────────┐
             # │          astream_events 사용 시 주의사항                  │
@@ -440,6 +444,33 @@ class RAGService:
                         "type": "retrieve_end",
                         "message": f"{len(retrieved_docs)}개의 문서를 찾았습니다.",
                         "doc_count": len(retrieved_docs),
+                    }
+
+                elif event_type == "on_chain_end" and name == "hyde":
+                    data = event.get("data", {})
+                    output = data.get("output", {})
+                    hypothetical_doc = output.get("hypothetical_doc", "")
+
+                    yield {
+                        "type": "hyde_generated",
+                        "message": "HyDE 가상 문서 생성 완료",
+                        "hypothetical_doc": hypothetical_doc,
+                    }
+
+                # [grade_documents 노드] 웹 검색 실행 여부 체크
+                elif event_type == "on_chain_end" and name == "grade_documents":
+                    data = event.get("data", {})
+                    output = data.get("output", {})
+                    web_search = output.get("web_search", False)
+
+                    yield {
+                        "type": "web_search_decision",
+                        "web_search": web_search,
+                        "message": (
+                            "웹 검색 보강이 필요합니다."
+                            if web_search
+                            else "벡터 DB 검색 결과만으로 충분합니다."
+                        ),
                     }
 
                 # [generate 노드] 답변 생성 시작
@@ -520,6 +551,8 @@ class RAGService:
             # 완료 이벤트 반환
             yield {
                 "type": "done",
+                "hypothetical_doc": hypothetical_doc,
+                "web_search": web_search,
                 "full_response": full_response,
                 "evidence_indices": evidence_indices,
                 "elapsed_time": elapsed_time,
