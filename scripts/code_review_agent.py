@@ -76,9 +76,36 @@ def analyze_code_with_llm(diff_text):
 [Git Diff 끝]
 """
 
+    print(f"[Debug] Diff length: {len(diff_text)} characters")
+    
     ollama_host = os.getenv('OLLAMA_HOST')
-    ollama_model = os.getenv('OLLAMA_MODEL', 'hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0')
+    # fallback to 1.2B if not specified to avoid loading massive 32B model, but keeping user default if set
+    ollama_model = os.getenv('OLLAMA_MODEL')
+    if not ollama_model:
+        ollama_model = 'hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0'
+        
     groq_api_key = os.getenv('GROQ_API_KEY')
+    
+    # helper for Groq fallback
+    def call_groq():
+        if not groq_api_key:
+            raise ValueError("Ollama failed and GROQ_API_KEY is not set for fallback.")
+        print("Using Groq API...")
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {groq_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "llama3-8b-8192",
+            "messages": [
+                {"role": "system", "content": "You are an expert code reviewer. Respond in Korean."},
+                {"role": "user", "content": prompt}
+            ]
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.json()['choices'][0]['message']['content']
     
     if ollama_host:
         print(f"Using Custom Ollama at {ollama_host} with model {ollama_model}")
@@ -98,34 +125,29 @@ def analyze_code_with_llm(diff_text):
             ],
             "stream": True # 스트림 연결을 유지해 Cloudflare 524 타임아웃 방지
         }
-        resp = requests.post(url, json=payload, headers=headers, stream=True)
-        resp.raise_for_status()
         
-        full_content = ""
-        for line in resp.iter_lines():
-            if line:
-                chunk = json.loads(line)
-                if "message" in chunk and "content" in chunk["message"]:
-                    full_content += chunk["message"]["content"]
-        return full_content
-        
+        try:
+            # 타임아웃 180초 (사용자 요청)
+            resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=180)
+            resp.raise_for_status()
+            
+            full_content = ""
+            for line in resp.iter_lines():
+                if line:
+                    chunk = json.loads(line)
+                    if "message" in chunk and "content" in chunk["message"]:
+                        full_content += chunk["message"]["content"]
+            if not full_content.strip():
+                raise ValueError("Ollama returned an empty response.")
+            return full_content
+            
+        except Exception as e:
+            print(f"Ollama Request Failed: {e}")
+            print("Falling back to Groq API due to Ollama timeout/error...")
+            return call_groq()
+            
     elif groq_api_key:
-        print("Using Groq API")
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {groq_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama3-8b-8192",
-            "messages": [
-                {"role": "system", "content": "You are an expert code reviewer. Respond in Korean."},
-                {"role": "user", "content": prompt}
-            ]
-        }
-        resp = requests.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
+        return call_groq()
         
     else:
         raise ValueError("Neither OLLAMA_HOST nor GROQ_API_KEY are set.")
