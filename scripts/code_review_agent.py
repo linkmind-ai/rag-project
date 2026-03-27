@@ -24,6 +24,25 @@ def get_event_details():
     else:
         return event_name, repo, None, None
 
+def filter_large_machine_files(diff_text):
+    """uv.lock 등 기계가 생성하는 거대 파일의 Diff를 LLM 분석에서 제외합니다."""
+    if not diff_text:
+        return diff_text
+        
+    blocks = diff_text.split("diff --git ")
+    filtered_blocks = []
+    for block in blocks:
+        if not block.strip():
+            continue
+        first_line = block.split('\n', 1)[0]
+        # uv.lock, package-lock.json, poetry.lock, requirements 등은 리뷰 생략
+        if any(ignored in first_line for ignored in ["uv.lock", ".lock", "requirements"]):
+            print(f"Skipping large/machine-generated file in diff: {first_line}")
+            continue
+            
+        filtered_blocks.append("diff --git " + block)
+    return "".join(filtered_blocks)
+
 def get_pr_diff(repo, pr_number, token):
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     headers = {
@@ -32,7 +51,7 @@ def get_pr_diff(repo, pr_number, token):
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    return response.text
+    return filter_large_machine_files(response.text)
 
 def get_push_diff(repo, before, after, token):
     url = f"https://api.github.com/repos/{repo}/compare/{before}...{after}"
@@ -42,7 +61,7 @@ def get_push_diff(repo, before, after, token):
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    return response.text
+    return filter_large_machine_files(response.text)
 
 def analyze_code_with_llm(diff_text):
     prompt = f"""
