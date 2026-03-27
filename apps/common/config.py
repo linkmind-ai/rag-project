@@ -78,6 +78,7 @@ class Settings(BaseSettings):
 
     # Tavily Search API 설정
     TAVILY_API_KEY: str = Field(
+        default="",
         validation_alias=AliasChoices("TAVILY_API_KEY", "TAVILY_KEY"),
     )
 
