@@ -104,19 +104,15 @@ flowchart LR
 git clone https://github.com/your-repo/rag-project.git
 cd rag-project
 git switch notion-analysis
-# 가상환경 생성 및 활성화
-python -m venv .venv
-source .venv/bin/activate
-
-# 의존성 설치
-pip install -r requirements.txt
+# 의존성 설치 및 가상환경 세팅 (uv 사용)
+uv sync
 
 # 환경 변수 설정
 cp .env.sample .env
 # .env 파일을 편집하여 설정값 입력
 
 # 서버 실행
-cd apps && python main.py
+cd apps && uv run python main.py
 ```
 
 ### WSL 2 (Windows)
@@ -129,19 +125,15 @@ sudo apt update && sudo apt install python3.11 python3.11-venv
 git clone https://github.com/your-repo/rag-project.git
 cd rag-project
 git switch notion-analysis
-# 가상환경 생성 및 활성화
-python3.11 -m venv .venv
-source .venv/bin/activate
-
-# 의존성 설치
-pip install -r requirements.txt
+# 의존성 설치 및 가상환경 세팅 (uv 사용)
+uv sync
 
 # 환경 변수 설정
 cp .env.sample .env
 nano .env  # 설정값 편집
 
 # 서버 실행
-cd apps && python main.py
+cd apps && uv run python main.py
 ```
 
 ## 환경 변수 설정
@@ -246,22 +238,17 @@ curl -X POST http://localhost:8000/query \
 ### 테스트 실행
 
 ```bash
-# .venv-eval 환경 설정 (최초 1회)
-python -m venv .venv-eval
-source .venv-eval/bin/activate
-pip install -r requirements-eval.txt
-
 # Golden Set 자동 생성 (Ollama gemma3:4b)
-python tests/generate_golden_set.py --size 50
+uv run python tests/generate_golden_set.py --size 50
 
 # Phase 1: 검색 품질 평가
-pytest tests/test_search_quality.py -v
+uv run pytest tests/test_search_quality.py -v
 
 # Phase 2: 생성 품질 평가 (Groq judge)
-pytest tests/test_ragas.py::TestRAGAS -v -s
+uv run pytest tests/test_ragas.py::TestRAGAS -v -s
 
 # Phase 2: 생성 품질 평가 (Ollama judge, rate limit 없음)
-pytest tests/test_ragas.py::TestRAGASOllama -v -s
+uv run pytest tests/test_ragas.py::TestRAGASOllama -v -s
 ```
 
 ## 프로젝트 구조
@@ -300,8 +287,9 @@ rag-project/
 │   └── user_test_log.md    # API 테스트 로그
 ├── .env.sample
 ├── .gitignore
-├── requirements.txt
-├── CLAUDE.md               # AI 어시스턴트 지침
+├── pyproject.toml        # uv 기반 의존성 통합 관리
+├── uv.lock               # 의존성 버전 고정 파일
+├── CLAUDE.md             # AI 어시스턴트 지침
 └── README.md
 ```
 

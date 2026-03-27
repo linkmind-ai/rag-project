@@ -17,7 +17,7 @@ cd apps && python main.py
 cd apps && uvicorn api:app --host 0.0.0.0 --port 8000 --reload
 
 # Install dependencies
-pip install -r requirements.txt
+uv sync
 
 # Format code (configured in VS Code)
 black <file>

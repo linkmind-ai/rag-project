@@ -218,8 +218,8 @@ class TestIdentifyEvidenceNode:
 
         문서가 3개인데 인덱스 [0, 5, 10]을 반환하면 [0]만 유효
         """
-        query = "테스트"
-        answer = "테스트 답변"
+        query = "정체감 장애"
+        answer = "단일성 정체감 장애는 인격이 하나인 상태입니다."
         state = self._create_state(query, answer, sample_documents)
 
         mock_response = '{"evidence_indices": [0, 5, 10]}'
@@ -234,8 +234,8 @@ class TestIdentifyEvidenceNode:
         self, rag_graph: RAGGraph, sample_documents: List[Document]
     ) -> None:
         """음수 인덱스 필터링 테스트"""
-        query = "테스트"
-        answer = "테스트 답변"
+        query = "정체감과 결혼"
+        answer = "단일성 정체감 장애이며 저자는 결혼하지 말라고 조언합니다."
         state = self._create_state(query, answer, sample_documents)
 
         mock_response = '{"evidence_indices": [-1, 0, 1]}'
@@ -251,8 +251,8 @@ class TestIdentifyEvidenceNode:
         self, rag_graph: RAGGraph, sample_documents: List[Document]
     ) -> None:
         """LLM 예외 발생 시 모든 문서 인덱스 반환 (fallback)"""
-        query = "테스트"
-        answer = "테스트 답변"
+        query = "모든 문서 요약"
+        answer = "단일성 정체감 장애이며 저자는 결혼하지 말라고 조언합니다. 관찰력은 가설을 갱신합니다."
         state = self._create_state(query, answer, sample_documents)
 
         with patch("asyncio.to_thread", side_effect=Exception("LLM 오류")):

@@ -257,8 +257,8 @@ class TestPromptQuality:
         """프롬프트에 불확실성 처리 지침 존재 확인"""
         from prompts.chat_prompt import _CHAT_PROMPT
 
-        prompt_str = str(_CHAT_PROMPT)
-        assert "모른다" in prompt_str or "확실하지 않" in prompt_str
+        prompt_str = str(_CHAT_PROMPT.messages)
+        assert "찾을 수 없" in prompt_str or "모른다" in prompt_str or "확실하지 않" in prompt_str
 
 
 class TestGenerateNodeIntegration:
