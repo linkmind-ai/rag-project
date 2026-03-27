@@ -10,6 +10,11 @@ on:
     branches:
       - main
       - notion-analysis
+  workflow_dispatch:
+    inputs:
+      target_commit:
+        description: 'Review target commit SHA'
+        required: true
 
 jobs:
   code-review:
@@ -52,5 +57,6 @@ jobs:
           OLLAMA_MODEL: ${{ secrets.OLLAMA_MODEL }}
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          TARGET_COMMIT: ${{ github.event.inputs.target_commit }}
         run: |
           uv run python scripts/code_review_agent.py

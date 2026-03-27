@@ -21,6 +21,9 @@ def get_event_details():
         before = event.get('before')
         after = event.get('after')
         return 'push', repo, before, after
+    elif event_name == 'workflow_dispatch':
+        target_commit = os.getenv('TARGET_COMMIT')
+        return 'workflow_dispatch', repo, target_commit, None
     else:
         return event_name, repo, None, None
 
@@ -55,6 +58,16 @@ def get_pr_diff(repo, pr_number, token):
 
 def get_push_diff(repo, before, after, token):
     url = f"https://api.github.com/repos/{repo}/compare/{before}...{after}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3.diff"
+    }
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()
+    return filter_large_machine_files(response.text)
+
+def get_commit_diff(repo, commit_sha, token):
+    url = f"https://api.github.com/repos/{repo}/commits/{commit_sha}"
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3.diff"
@@ -193,11 +206,17 @@ def main():
         elif event_name == 'push':
             before, after = arg1, arg2
             if not before or not after or before.replace('0', '') == '':
-                # Using the single commit diff if before is 000000 or missing
                 diff_text = get_push_diff(repo, after + "^", after, token)
             else:
                 print(f"Fetching diff for push {before}...{after}...")
                 diff_text = get_push_diff(repo, before, after, token)
+        elif event_name == 'workflow_dispatch':
+            target_commit = arg1
+            if not target_commit:
+                print("No target_commit provided for manual trigger.")
+                sys.exit(1)
+            print(f"Fetching diff for manual trigger commit {target_commit}...")
+            diff_text = get_commit_diff(repo, target_commit, token)
         else:
             print(f"Skipping code review for event: {event_name}")
             sys.exit(0)
@@ -209,13 +228,15 @@ def main():
         print("Analyzing with LLM...")
         analysis_result = analyze_code_with_llm(diff_text)
         
-        review_comment = f"## 🤖 AI Code Review Agent (코드 리뷰 리포트)\n\n{analysis_result}"
+        review_comment = f"## 🤖 AI Code Review Agent (수동 콕 집어 리뷰)\n\n{analysis_result}" if event_name == 'workflow_dispatch' else f"## 🤖 AI Code Review Agent (코드 리뷰 리포트)\n\n{analysis_result}"
         
         print("Posting result to GitHub...")
         if event_name == 'pull_request':
             post_pr_comment(repo, arg1, token, review_comment)
         elif event_name == 'push':
             post_commit_comment(repo, arg2, token, review_comment)
+        elif event_name == 'workflow_dispatch':
+            post_commit_comment(repo, target_commit, token, review_comment)
             
     except Exception as e:
         print(f"Error during code review: {e}")
