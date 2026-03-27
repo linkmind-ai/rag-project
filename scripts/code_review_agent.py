@@ -24,6 +24,25 @@ def get_event_details():
     else:
         return event_name, repo, None, None
 
+def filter_large_machine_files(diff_text):
+    """uv.lock 등 기계가 생성하는 거대 파일의 Diff를 LLM 분석에서 제외합니다."""
+    if not diff_text:
+        return diff_text
+        
+    blocks = diff_text.split("diff --git ")
+    filtered_blocks = []
+    for block in blocks:
+        if not block.strip():
+            continue
+        first_line = block.split('\n', 1)[0]
+        # uv.lock, package-lock.json, poetry.lock, requirements 등은 리뷰 생략
+        if any(ignored in first_line for ignored in ["uv.lock", ".lock", "requirements"]):
+            print(f"Skipping large/machine-generated file in diff: {first_line}")
+            continue
+            
+        filtered_blocks.append("diff --git " + block)
+    return "".join(filtered_blocks)
+
 def get_pr_diff(repo, pr_number, token):
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     headers = {
@@ -32,7 +51,7 @@ def get_pr_diff(repo, pr_number, token):
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    return response.text
+    return filter_large_machine_files(response.text)
 
 def get_push_diff(repo, before, after, token):
     url = f"https://api.github.com/repos/{repo}/compare/{before}...{after}"
@@ -42,7 +61,7 @@ def get_push_diff(repo, before, after, token):
     }
     response = requests.get(url, headers=headers)
     response.raise_for_status()
-    return response.text
+    return filter_large_machine_files(response.text)
 
 def analyze_code_with_llm(diff_text):
     prompt = f"""
@@ -57,9 +76,36 @@ def analyze_code_with_llm(diff_text):
 [Git Diff 끝]
 """
 
+    print(f"[Debug] Diff length: {len(diff_text)} characters")
+    
     ollama_host = os.getenv('OLLAMA_HOST')
-    ollama_model = os.getenv('OLLAMA_MODEL', 'hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0')
+    # fallback to 1.2B if not specified to avoid loading massive 32B model, but keeping user default if set
+    ollama_model = os.getenv('OLLAMA_MODEL')
+    if not ollama_model:
+        ollama_model = 'hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0'
+        
     groq_api_key = os.getenv('GROQ_API_KEY')
+    
+    # helper for Groq fallback
+    def call_groq():
+        if not groq_api_key:
+            raise ValueError("Ollama failed and GROQ_API_KEY is not set for fallback.")
+        print("Using Groq API...")
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {groq_api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "llama3-8b-8192",
+            "messages": [
+                {"role": "system", "content": "You are an expert code reviewer. Respond in Korean."},
+                {"role": "user", "content": prompt}
+            ]
+        }
+        resp = requests.post(url, headers=headers, json=payload, timeout=30)
+        resp.raise_for_status()
+        return resp.json()['choices'][0]['message']['content']
     
     if ollama_host:
         print(f"Using Custom Ollama at {ollama_host} with model {ollama_model}")
@@ -77,29 +123,31 @@ def analyze_code_with_llm(diff_text):
                 {"role": "system", "content": "You are a helpful and experienced senior software engineer. Please answer in Korean."},
                 {"role": "user", "content": prompt}
             ],
-            "stream": False
+            "stream": True # 스트림 연결을 유지해 Cloudflare 524 타임아웃 방지
         }
-        resp = requests.post(url, json=payload, headers=headers)
-        resp.raise_for_status()
-        return resp.json()['message']['content']
         
+        try:
+            # 타임아웃 180초 (사용자 요청)
+            resp = requests.post(url, json=payload, headers=headers, stream=True, timeout=180)
+            resp.raise_for_status()
+            
+            full_content = ""
+            for line in resp.iter_lines():
+                if line:
+                    chunk = json.loads(line)
+                    if "message" in chunk and "content" in chunk["message"]:
+                        full_content += chunk["message"]["content"]
+            if not full_content.strip():
+                raise ValueError("Ollama returned an empty response.")
+            return full_content
+            
+        except Exception as e:
+            print(f"Ollama Request Failed: {e}")
+            print("Falling back to Groq API due to Ollama timeout/error...")
+            return call_groq()
+            
     elif groq_api_key:
-        print("Using Groq API")
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        headers = {
-            "Authorization": f"Bearer {groq_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "llama3-8b-8192",
-            "messages": [
-                {"role": "system", "content": "You are an expert code reviewer. Respond in Korean."},
-                {"role": "user", "content": prompt}
-            ]
-        }
-        resp = requests.post(url, headers=headers, json=payload)
-        resp.raise_for_status()
-        return resp.json()['choices'][0]['message']['content']
+        return call_groq()
         
     else:
         raise ValueError("Neither OLLAMA_HOST nor GROQ_API_KEY are set.")
