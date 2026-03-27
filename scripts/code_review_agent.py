@@ -63,7 +63,14 @@ def analyze_code_with_llm(diff_text):
     
     if ollama_host:
         print(f"Using Custom Ollama at {ollama_host} with model {ollama_model}")
+        cf_client_id = os.getenv('CF_ACCESS_CLIENT_ID')
+        cf_client_secret = os.getenv('CF_ACCESS_CLIENT_SECRET')
         url = f"{ollama_host.rstrip('/')}/api/chat"
+        headers = {}
+        if cf_client_id and cf_client_secret:
+            headers['CF-Access-Client-Id'] = cf_client_id
+            headers['CF-Access-Client-Secret'] = cf_client_secret
+        
         payload = {
             "model": ollama_model,
             "messages": [
@@ -72,7 +79,7 @@ def analyze_code_with_llm(diff_text):
             ],
             "stream": False
         }
-        resp = requests.post(url, json=payload)
+        resp = requests.post(url, json=payload, headers=headers)
         resp.raise_for_status()
         return resp.json()['message']['content']
         
