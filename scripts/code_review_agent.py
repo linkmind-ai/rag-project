@@ -96,11 +96,18 @@ def analyze_code_with_llm(diff_text):
                 {"role": "system", "content": "You are a helpful and experienced senior software engineer. Please answer in Korean."},
                 {"role": "user", "content": prompt}
             ],
-            "stream": False
+            "stream": True # 스트림 연결을 유지해 Cloudflare 524 타임아웃 방지
         }
-        resp = requests.post(url, json=payload, headers=headers)
+        resp = requests.post(url, json=payload, headers=headers, stream=True)
         resp.raise_for_status()
-        return resp.json()['message']['content']
+        
+        full_content = ""
+        for line in resp.iter_lines():
+            if line:
+                chunk = json.loads(line)
+                if "message" in chunk and "content" in chunk["message"]:
+                    full_content += chunk["message"]["content"]
+        return full_content
         
     elif groq_api_key:
         print("Using Groq API")
