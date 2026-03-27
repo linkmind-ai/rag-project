@@ -4,10 +4,12 @@ on:
   pull_request:
     branches:
       - main
+      - notion-analysis
     types: [opened, synchronize]
   push:
     branches:
       - main
+      - notion-analysis
 
 jobs:
   code-review:
