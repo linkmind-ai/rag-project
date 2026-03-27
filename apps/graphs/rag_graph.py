@@ -640,9 +640,9 @@ class RAGGraph:
         except Exception as e:
             logger.error("근거 문서 식별 오류: {}", e)
             # Fallback: LLM 실패 시 키워드 기반 결과만 사용
-            fallback_indices = [
+            fallback_indices = sorted([
                 idx for idx, ratio, _ in keyword_candidates if ratio >= 0.15
-            ]
+            ])
             return {"evidence_indices": fallback_indices if fallback_indices else [0]}
 
     def get_graph(self) -> CompiledStateGraph | None:
