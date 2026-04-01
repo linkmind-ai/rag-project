@@ -15,7 +15,9 @@ class Settings(BaseSettings):
         default="https://ollama.nabee.ai.kr/",
         validation_alias=AliasChoices("OLLAMA_BASE_URL", "OLLAMA_HOST"),
     )
-    OLLAMA_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16")
+    OLLAMA_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0")
+    REWRITER_MODEL: str = Field(default="gemma3:4b")
+    GRADER_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:Q4_K_M")
 
     # 엘라스틱서치 설정
     ELASTICSEARCH_URL: str = Field(
