@@ -27,7 +27,7 @@ LinkMind는 개인 Notion 문서를 기반으로 한 **지능형 RAG 시스템**
 ### Corrective RAG with HyDE
 
 ```mermaid
-flowchart LR
+flowchart TD
 
     %% Input
     A[Query]
