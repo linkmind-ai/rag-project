@@ -197,7 +197,7 @@ class RAGGraph:
                     "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
                     "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
                 },
-                temperature=1.0,
+                temperature=0.7,
             )
             self._rewriter_llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
@@ -210,7 +210,7 @@ class RAGGraph:
             )
             self._grader_llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
-                model=settings.REWRITER_MODEL,
+                model=settings.GRADER_MODEL,
                 headers={
                     "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
                     "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,

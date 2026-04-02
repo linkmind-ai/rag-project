@@ -2,43 +2,81 @@
 
 LangGraph 기반 멀티턴 RAG(Retrieval-Augmented Generation) 시스템입니다. Elasticsearch의 하이브리드 검색(Vector + BM25)과 Ollama LLM을 활용하여 한국어 문서에 대한 질의응답을 제공합니다.
 
+## Motivation
+LinkMind는 개인 Notion 문서를 기반으로 한 **지능형 RAG 시스템**으로,
+흩어진 노트를 **검색 · 연결 · 요약 가능한 개인 지식 베이스**로 변환하는 것을 목표로 합니다.
+기존 노트 앱은 정보가 누적될수록 다음과 같은 문제가 발생합니다
+
+- 노트 간 연결이 없어 정보가 파편화됨
+- 과거 기록을 효과적으로 재활용하기 어려움
+- 범용 AI는 개인 문맥과 표현을 충분히 반영하지 못함
+
+이러한 문제를 해결하기 위해, 사용자의 개인 DB을 기반으로 맥락 있는 답변을 생성하는 개인화된 지식 탐색 시스템을 구축했습니다.
+
 ## 주요 특징
 
 - **하이브리드 검색**: Vector 유사도 + BM25 키워드 검색 결합
+- **Corrective RAG 파이프라인**: 쿼리와 문서의 관련성을 기반으로 쿼리를 web search 또는 generate 단계로 routing 
+- **HyDE query rewriting**: 사용자 질문으로 생성한 가상 문서로 관련 문서 검색
 - **멀티턴 대화**: 세션 기반 대화 이력 관리
 - **Evidence 추적**: N3 노드의 하이브리드 로직으로 답변 근거 문서 식별
 - **비동기 처리**: FastAPI + aiohttp 기반 고성능 비동기 아키텍처
 
 ## 아키텍처
 
-### N1-N2-N3 파이프라인
+### Corrective RAG with HyDE
 
 ```mermaid
 flowchart LR
-    subgraph Input
-        Q[Query]
+
+    %% Input
+    A[Query]
+
+    %% Subgraphs
+    subgraph N1 [N1: HyDE]
+        B[LLM 기반<br>가상문서 생성]
     end
 
-    subgraph N1[N1: Retrieve]
-        ES[Elasticsearch<br/>Hybrid Search]
+    subgraph N2 [N2: Retrieve]
+        C[Hybrid Search<br>cosine + BM25]
     end
 
-    subgraph N2[N2: Generate]
-        LLM[Ollama LLM<br/>답변 생성]
+    subgraph N3 [N3: Grade Documents]
+        D[쿼리 - 문서 관련성 평가]
     end
 
-    subgraph N3[N3: Identify Evidence]
-        EV[LLM + Keyword<br/>하이브리드 검증]
+    subgraph N4 [N4: Query Rewrite]
+        E[Web Search용<br>Query 재작성]
     end
 
-    subgraph Output
-        A[Answer + Sources]
+    subgraph N5 [N5: Web Search]
+        F[Tavily API<br>외부 검색]
     end
 
-    Q --> N1
-    N1 -->|retrieved_docs| N2
-    N2 -->|answer| N3
-    N3 -->|evidence_indices| Output
+    subgraph N6 [N6: Generate]
+        G[LLM 답변 생성]
+    end
+
+    H[Final Answer]
+
+    %% Flow
+    A --> B
+    B -->|hypothetical_doc| C
+    C -->|retrieved_docs| D
+
+    %% Branching
+    D -->|relevant| G
+    D -->|not relevant| E
+
+    %% Web fallback
+    E -->|query_for_web| F
+    F -->|web_docs| G
+
+    G --> H
+
+    %% Edge coloring
+    linkStyle 3 stroke:#3b82f6,stroke-width:3px,color:#3b82f6
+    linkStyle 4 stroke:#ef4444,stroke-width:3px,color:#ef4444
 ```
 
 ### 시스템 구조
