@@ -11,9 +11,21 @@ import pytest
 
 # apps 디렉토리를 path에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent / "apps"))
+# tests/ 자체를 path에 추가 — ragas_e2e 패키지 import 가능
+sys.path.insert(0, str(Path(__file__).parent))
 
 # pytest-asyncio 모드 설정
 pytest_plugins = ("pytest_asyncio",)
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """pytest CLI 옵션 등록."""
+    parser.addoption(
+        "--golden-set",
+        default=None,
+        metavar="PATH",
+        help="golden_set JSON 파일 경로 (기본값: tests/golden_sets/golden_set_100.json)",
+    )
 
 
 def pytest_configure(config: pytest.Config) -> None:

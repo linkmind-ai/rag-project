@@ -183,7 +183,7 @@ async def main() -> None:
     parser.add_argument(
         "--golden-set",
         type=str,
-        default=str(Path(__file__).parent / "golden_set.json"),
+        default=str(Path(__file__).parent / "golden_sets" / "golden_set.json"),
         help="Golden Set JSON 파일 경로",
     )
     parser.add_argument(

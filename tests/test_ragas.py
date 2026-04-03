@@ -140,7 +140,7 @@ pytest.importorskip(
 
 # ── 경로 설정 ──────────────────────────────────────────────────────────────────
 _TESTS_DIR = Path(__file__).parent
-_GOLDEN_SET_PATH = _TESTS_DIR / "golden_set_100.json"
+_GOLDEN_SET_PATH = _TESTS_DIR / "golden_sets" / "golden_set_100.json"
 _RESULT_PATH = _TESTS_DIR / "ragas_result.json"
 
 _FAITHFULNESS_THRESHOLD = 0.70
