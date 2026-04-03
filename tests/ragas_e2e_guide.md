@@ -177,12 +177,15 @@ python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets
 | 날짜 | 측정자 | golden_set | judge | Faithfulness | AnswerRelevancy | ContextPrecision | ContextRecall | 비고 |
 |------|--------|-----------|-------|:------------:|:---------------:|:----------------:|:-------------:|------|
 | 2026-04-03 | Youngman Kim | golden_set_5 (5건) | qwen2.5:72b | ✅ 100.0% | ✅ 70.2% | ✅ 80.0% | ✅ 80.0% | 로직 검증용 (소규모) |
+| 2026-04-03 | Youngman Kim | golden_set_100 (100건) | qwen2.5:72b | ✅ 85.5% | ❌ 60.4% | ❌ 60.0% | ❌ 60.1% | 최초 정식 평가 / 웹검색 37건(37%) / 평균 25.8s/쿼리 |
 
 ### 미달 항목 개선 이력
 
 | 날짜 | 메트릭 | 점수 | 원인 | 조치 | 결과 |
 |------|--------|-----:|------|------|------|
-| — | — | — | — | — | — |
+| 2026-04-03 | ContextPrecision | 60.0% | 관련 없는 문서가 상위 검색됨 (웹검색 fallback 37%) | — | — |
+| 2026-04-03 | AnswerRelevancy | 60.4% | 답변이 질문과 직접 연결되지 않음 | — | — |
+| 2026-04-03 | ContextRecall | 60.1% | 필요한 청크가 검색에서 누락됨 | — | — |
 
 ---
 
