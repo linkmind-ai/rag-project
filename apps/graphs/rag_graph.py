@@ -361,6 +361,7 @@ class RAGGraph:
         context = await elasticsearch_store.hybrid_search(
             query=query, k=settings.TOP_K_RESULTS, vector_weight=0.5
         )
+        logger.info(f"Query: {query}")
 
         return {"retrieved_docs": context.documents}
 
