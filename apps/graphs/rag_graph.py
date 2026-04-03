@@ -16,30 +16,29 @@ LangGraph 기반 RAG 워크플로우 모듈.
 - N3: LLM + 키워드 하이브리드 근거 식별
 """
 
-import os
 import asyncio
 import json
+import os
 import re
+import uuid
 from types import TracebackType
 from typing import Any
-import uuid
 
 from common.config import settings
 from common.logger import logger
+from langchain.output_parsers import PydanticOutputParser
 from langchain_community.llms import Ollama
+from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.output_parsers import StrOutputParser
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain.output_parsers import PydanticOutputParser
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-
 from models.state import Document, GraphState, Message
 from prompts.chat_history_prompt import _CHAT_WITH_HISTORY_PROMPT
 from prompts.chat_prompt import _CHAT_PROMPT
 from prompts.get_evidence_prompt import _GET_EVIDENCE_PROMPT
+from prompts.grade_document_prompt import _GRADE_PROMPT, GradeDocuments
 from prompts.hyde_prompt import _HYDE_PROMPT
-from prompts.grade_document_prompt import GradeDocuments, _GRADE_PROMPT
 from prompts.query_rewrite_for_web_prompt import _REWRITE_FOR_WEB_SEARCH_PROMPT
 from stores.vector_store import elasticsearch_store
 
@@ -230,8 +229,11 @@ class RAGGraph:
                 self.query_rewrite_prompt | self._rewriter_llm | StrOutputParser()
             )
 
-            os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
-            self._web_search_tool = TavilySearchResults(max_results=2)
+            if settings.TAVILY_API_KEY:
+                os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
+                self._web_search_tool = TavilySearchResults(max_results=2)
+            else:
+                self._web_search_tool = None
             # self._prompt_compressor = None
 
             self._build_graph()
@@ -407,7 +409,11 @@ class RAGGraph:
         query_for_web_search = state.query_for_web_search
         retrieved_docs = state.retrieved_docs
 
-        # 웹 검색
+        # 웹 검색 (TAVILY_API_KEY 미설정 시 스킵)
+        if self._web_search_tool is None:
+            logger.warning("TAVILY_API_KEY 미설정 — 웹 검색 스킵")
+            return {"retrieved_docs": retrieved_docs, "web_search": False}
+
         docs = await asyncio.to_thread(
             self._web_search_tool.invoke, query_for_web_search
         )

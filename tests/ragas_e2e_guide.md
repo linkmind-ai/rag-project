@@ -1,0 +1,210 @@
+# RAGAS E2E 평가 가이드
+
+> **목적**: 전체 RAG 파이프라인(N1~N7)을 실제 운영 경로로 실행하고 RAGAS 4개 메트릭으로 품질을 측정합니다.  
+> **위치**: `tests/ragas_e2e/`  
+> **표준 judge**: `qwen2.5:72b` (refactoring_log.md 2026-03-21 확정)
+
+---
+
+## 1. 기존 평가(`test_ragas.py`)와의 차이
+
+| 항목 | `test_ragas.py` | `ragas_e2e/test_e2e.py` |
+|------|:---:|:---:|
+| 검색 | `elasticsearch_store.hybrid_search()` 직접 호출 | `RAGService.process_query()` 경유 |
+| HyDE (N1) | ❌ | ✅ |
+| Grade Documents (N3) | ❌ | ✅ |
+| 웹 검색 fallback (N4→N5) | ❌ | ✅ |
+| 생성 프롬프트 | 테스트 전용 하드코딩 | `apps/prompts/chat_prompt.py` (운영 동일) |
+| Evidence 식별 (N7) | ❌ | ✅ |
+| 파이프라인 진단 | ❌ | ✅ (`ragas_e2e_diagnostics.json`) |
+
+---
+
+## 2. 파이프라인 구조
+
+```
+RAGService.process_query()
+└── RAGGraph.ainvoke()
+    ├── N1: hyde            — HyDE 가상 문서 생성 (rewriter LLM)
+    ├── N2: retrieve        — HyDE+query 결합 hybrid_search
+    ├── N3: grade_documents — 쿼리-문서 관련성 판정 (grader LLM)
+    ├── N4: query_rewrite   — 웹 검색 쿼리 재작성 (web_search=True 시)
+    ├── N5: search_web      — Tavily 웹 검색 (web_search=True 시)
+    ├── N6: generate        — 답변 생성 (chat_prompt.py, main LLM)
+    └── N7: identify_evidence — 하이브리드 근거 식별
+```
+
+---
+
+## 3. 패키지 구조
+
+```
+tests/ragas_e2e/
+├── __init__.py      — 공개 API
+├── _helpers.py      — ragas_score, build_ragas_embeddings, save_e2e_result
+├── _pipeline.py     — _run_single_sample, build_e2e_dataset
+└── test_e2e.py      — TestRAGASE2EQwen25, TestRAGASE2EGroq
+```
+
+---
+
+## 4. 사전 준비
+
+### 4-1. 환경
+
+```bash
+# 평가 전용 가상환경 (langchain-core 버전 충돌 방지)
+source .venv-eval/bin/activate
+pip install -r requirements-eval.txt
+```
+
+### 4-2. `.env` 필수 항목
+
+```env
+ES_HOST=...
+ES_API_KEY=...
+OLLAMA_HOST=...
+CF_ACCESS_CLIENT_ID=...
+CF_ACCESS_CLIENT_SECRET=...
+TAVILY_API_KEY=...          # N5 웹 검색 필수
+
+# Groq judge 사용 시
+GROQ_API_KEY=...
+GROQ_API_KEY_2=...          # KEY_1 rate limit 분산용 (없으면 KEY_1 fallback)
+```
+
+### 4-3. golden_set 파일
+
+| 파일 | 건수 | 용도 |
+|------|-----:|------|
+| `golden_sets/golden_set_100.json` | 100 | 기본값, 표준 평가 |
+| `golden_sets/golden_set_138.json` | 138 | 확장 평가 |
+| `golden_sets/golden_set_mrc.json` | — | MRC 도메인 특화 |
+| `golden_sets/golden_set.json` | — | 레거시 |
+
+---
+
+## 5. 실행 방법
+
+### 5-1. pytest (CI / 팀 공유)
+
+```bash
+# 표준 judge (qwen2.5:72b) — 기본 golden_set
+pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EQwen25 -v -s
+
+# golden_set 파일 지정
+pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EQwen25 -v -s \
+  --golden-set tests/golden_sets/golden_set_138.json
+
+# Groq judge
+pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EGroq -v -s
+```
+
+### 5-2. 단독 실행 (PyCharm 디버깅)
+
+**Run Configuration 설정**
+
+| 항목 | 값 |
+|------|-----|
+| Script path | `tests/ragas_e2e/test_e2e.py` |
+| Parameters | `--judge qwen25 --golden-set tests/golden_set_100.json` |
+| Working directory | 프로젝트 루트 |
+
+```bash
+# 터미널 직접 실행
+python tests/ragas_e2e/test_e2e.py --judge qwen25
+python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets/golden_set_138.json
+```
+
+### 5-3. 디버깅 포인트 (`_pipeline.py` → `_run_single_sample()`)
+
+| 변수 | 확인 내용 | 노드 |
+|------|----------|------|
+| `hypothetical_doc` | HyDE가 생성한 가상 문서 | N1 |
+| `all_docs` | 검색된 문서 목록 | N2 |
+| `web_search_triggered` | 웹 검색 경로 여부 | N3 |
+| `answer` | 운영 프롬프트로 생성된 답변 | N6 |
+| `evidence_indices` | 근거 문서 인덱스 | N7 |
+
+---
+
+## 6. 결과 파일
+
+| 파일 | 내용 |
+|------|------|
+| `tests/ragas_e2e_result.json` | RAGAS 4개 메트릭 점수 + pass/fail |
+| `tests/ragas_e2e_diagnostics.json` | 쿼리별 노드 출력 (HyDE, 웹검색 여부, 근거 인덱스, 처리시간) |
+
+### `ragas_e2e_result.json` 예시
+
+```json
+{
+  "evaluated_at": "2026-04-03T10:00:00",
+  "pipeline": "RAGService.process_query() → RAGGraph (N1~N7)",
+  "summary": {
+    "faithfulness": 0.856,
+    "context_precision": 0.948,
+    "answer_relevancy": 0.708,
+    "context_recall": 0.989,
+    "faithfulness_pass": true,
+    "context_precision_pass": true,
+    "answer_relevancy_pass": true,
+    "context_recall_pass": true,
+    "total_queries": 100
+  }
+}
+```
+
+---
+
+## 7. 평가 기준 (임계값)
+
+| 메트릭 | 기준 | 측정 원리 |
+|--------|-----:|---------|
+| Faithfulness | ≥ 70% | 답변 내 주장이 검색 컨텍스트로 뒷받침되는 비율 |
+| AnswerRelevancy | ≥ 70% | 역생성 질문 ↔ 원래 질문 임베딩 유사도 |
+| ContextPrecision | ≥ 70% | 관련 청크가 검색 결과 상위에 랭크되는지 여부 |
+| ContextRecall | ≥ 70% | reference 커버에 필요한 청크 검색 여부 |
+
+---
+
+## 8. 결과 기록
+
+> 측정 후 이 섹션에 결과를 추가해 주세요.
+
+### 측정 결과 누적
+
+| 날짜 | 측정자 | golden_set | judge | Faithfulness | AnswerRelevancy | ContextPrecision | ContextRecall | 비고 |
+|------|--------|-----------|-------|:------------:|:---------------:|:----------------:|:-------------:|------|
+| 2026-04-03 | Youngman Kim | golden_set_5 (5건) | qwen2.5:72b | ✅ 100.0% | ✅ 70.2% | ✅ 80.0% | ✅ 80.0% | 로직 검증용 (소규모) |
+
+### 미달 항목 개선 이력
+
+| 날짜 | 메트릭 | 점수 | 원인 | 조치 | 결과 |
+|------|--------|-----:|------|------|------|
+| — | — | — | — | — | — |
+
+---
+
+## 9. 미달 시 개선 방향
+
+| 메트릭 | E2E 관점 원인 | 개선 방향 |
+|--------|------------|---------|
+| **Faithfulness** | N6 생성 프롬프트가 컨텍스트 외 정보 포함 | `chat_prompt.py` 지시 강화 |
+| **AnswerRelevancy** | 답변이 질문과 직접 연결되지 않음 | `chat_prompt.py`에 질문 재인용 지시 추가 (refactoring_log 방향 B) |
+| **ContextPrecision** | 관련 없는 문서가 상위에 검색됨 | N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정 |
+| **ContextRecall** | 필요한 청크가 검색에서 누락됨 | `TOP_K_RESULTS` 증가 / N3 grade 기준 완화 |
+
+> **참고**: refactoring_log.md에서 각 변경의 실험 데이터를 확인할 수 있습니다.
+
+---
+
+## 10. 관련 파일
+
+| 파일 | 내용 |
+|------|------|
+| `tests/refactoring_log.md` | 검색/생성 로직 개선 실험 기록 (2026-03-20~21) |
+| `tests/rag_quality_report.md` | Phase 1/2 검색·생성 품질 최종 리포트 |
+| `tests/eval_guide.md` | 평가 파이프라인 전체 절차 |
+| `apps/prompts/chat_prompt.py` | N6 생성 노드 운영 프롬프트 |
+| `apps/graphs/rag_graph.py` | N1~N7 노드 구현체 |

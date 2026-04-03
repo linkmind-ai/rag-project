@@ -134,7 +134,9 @@ class TestGenerateNode:
         # 정보 부족 관련 문구 포함 여부
         insufficient_keywords = ["정보가 없", "정보가 부족", "답할 수 없", "모르"]
         has_insufficient_response = any(kw in answer for kw in insufficient_keywords)
-        assert has_insufficient_response, f"Expected insufficient info response, got: {answer}"
+        assert (
+            has_insufficient_response
+        ), f"Expected insufficient info response, got: {answer}"
 
     @pytest.mark.asyncio
     async def test_generate_with_empty_context(
@@ -257,8 +259,12 @@ class TestPromptQuality:
         """프롬프트에 불확실성 처리 지침 존재 확인"""
         from prompts.chat_prompt import _CHAT_PROMPT
 
-        prompt_str = str(_CHAT_PROMPT.messages)
-        assert "찾을 수 없" in prompt_str or "모른다" in prompt_str or "확실하지 않" in prompt_str
+        prompt_str = _CHAT_PROMPT.messages[0].prompt.template
+        assert (
+            "찾을 수 없" in prompt_str
+            or "모른다" in prompt_str
+            or "확실하지 않" in prompt_str
+        )
 
 
 class TestGenerateNodeIntegration:
@@ -270,9 +276,7 @@ class TestGenerateNodeIntegration:
         return RAGGraph()
 
     @pytest.mark.asyncio
-    async def test_prompt_receives_correct_context(
-        self, rag_graph: RAGGraph
-    ) -> None:
+    async def test_prompt_receives_correct_context(self, rag_graph: RAGGraph) -> None:
         """프롬프트에 올바른 컨텍스트가 전달되는지 확인"""
         documents = [
             Document(
@@ -297,7 +301,9 @@ class TestGenerateNodeIntegration:
         rag_graph._initialized = True
         rag_graph._llm = MagicMock()
 
-        with patch("asyncio.to_thread", side_effect=lambda fn, data: capture_invoke(data)):
+        with patch(
+            "asyncio.to_thread", side_effect=lambda fn, data: capture_invoke(data)
+        ):
             await rag_graph._generate_node(state)
 
         assert "context" in captured_input
