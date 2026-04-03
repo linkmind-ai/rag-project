@@ -346,7 +346,7 @@ class RAGGraph:
         hypothetical_doc = await asyncio.to_thread(
             self._hyde_docs_generator.invoke, {"query": query}
         )
-        logger.info(f"[HyDE] hypothetical_doc: {hypothetical_doc}")
+        logger.info(f"Query: {query}, [HyDE] hypothetical_doc: {hypothetical_doc}")
 
         return {"hypothetical_doc": hypothetical_doc}
 
