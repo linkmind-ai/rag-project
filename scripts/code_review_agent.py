@@ -28,21 +28,35 @@ def get_event_details():
         return event_name, repo, None, None
 
 def filter_large_machine_files(diff_text):
-    """uv.lock 등 기계가 생성하는 거대 파일의 Diff를 LLM 분석에서 제외합니다."""
+    """순수 코드가 아닌 파일(lock, md, json, log 등)의 Diff를 LLM 분석에서 제외합니다."""
     if not diff_text:
         return diff_text
-        
+
+    # 리뷰를 건너뛸 확장자 및 파일명 패턴
+    SKIP_EXTENSIONS = {".md", ".json", ".log", ".txt", ".lock", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env"}
+    SKIP_FILENAMES = ["uv.lock", "requirements"]
+
     blocks = diff_text.split("diff --git ")
     filtered_blocks = []
     for block in blocks:
         if not block.strip():
             continue
         first_line = block.split('\n', 1)[0]
-        # uv.lock, package-lock.json, poetry.lock, requirements 등은 리뷰 생략
-        if any(ignored in first_line for ignored in ["uv.lock", ".lock", "requirements"]):
-            print(f"Skipping large/machine-generated file in diff: {first_line}")
+
+        # 파일명 패턴 매칭
+        if any(name in first_line for name in SKIP_FILENAMES):
+            print(f"Skipping non-code file in diff: {first_line}")
             continue
-            
+
+        # 확장자 매칭 (b/path/to/file.ext 형태에서 추출)
+        parts = first_line.split(" b/")
+        if len(parts) > 1:
+            filename = parts[-1].strip()
+            ext = "." + filename.rsplit(".", 1)[-1] if "." in filename else ""
+            if ext.lower() in SKIP_EXTENSIONS:
+                print(f"Skipping non-code file in diff: {first_line}")
+                continue
+
         filtered_blocks.append("diff --git " + block)
     return "".join(filtered_blocks)
 
