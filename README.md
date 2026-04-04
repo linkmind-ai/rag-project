@@ -17,14 +17,13 @@ LinkMind는 개인 Notion 문서를 기반으로 한 **지능형 RAG 시스템**
 
 - **하이브리드 검색**: Vector 유사도 + BM25 키워드 검색 결합
 - **Corrective RAG 파이프라인**: 쿼리와 문서의 관련성을 기반으로 쿼리를 web search 또는 generate 단계로 routing 
-- **HyDE query rewriting**: 사용자 질문으로 생성한 가상 문서로 관련 문서 검색
 - **멀티턴 대화**: 세션 기반 대화 이력 관리
 - **Evidence 추적**: N3 노드의 하이브리드 로직으로 답변 근거 문서 식별
 - **비동기 처리**: FastAPI + aiohttp 기반 고성능 비동기 아키텍처
 
 ## 아키텍처
 
-### Corrective RAG with HyDE
+### Corrective RAG
 
 ```mermaid
 flowchart TD
