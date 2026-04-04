@@ -33,35 +33,30 @@ flowchart TD
     A[Query]
 
     %% Subgraphs
-    subgraph N1 [N1: HyDE]
-        B[LLM 기반<br>가상문서 생성]
-    end
-
-    subgraph N2 [N2: Retrieve]
+    subgraph N1 [N1: Retrieve]
         C[Hybrid Search<br>cosine + BM25]
     end
 
-    subgraph N3 [N3: Grade Documents]
+    subgraph N2 [N2: Grade Documents]
         D[쿼리 - 문서 관련성 평가]
     end
 
-    subgraph N4 [N4: Query Rewrite]
+    subgraph N3 [N3: Query Rewrite]
         E[Web Search용<br>Query 재작성]
     end
 
-    subgraph N5 [N5: Web Search]
+    subgraph N4 [N4: Web Search]
         F[Tavily API<br>외부 검색]
     end
 
-    subgraph N6 [N6: Generate]
+    subgraph N5 [N5: Generate]
         G[LLM 답변 생성]
     end
 
     H[Final Answer]
 
     %% Flow
-    A --> B
-    B -->|hypothetical_doc| C
+    A --> C
     C -->|retrieved_docs| D
 
     %% Branching
@@ -75,8 +70,8 @@ flowchart TD
     G --> H
 
     %% Edge coloring
-    linkStyle 3 stroke:#3b82f6,stroke-width:3px,color:#3b82f6
-    linkStyle 4 stroke:#ef4444,stroke-width:3px,color:#ef4444
+    linkStyle 2 stroke:#3b82f6,stroke-width:3px,color:#3b82f6
+    linkStyle 3 stroke:#ef4444,stroke-width:3px,color:#ef4444
 ```
 
 ### 시스템 구조
