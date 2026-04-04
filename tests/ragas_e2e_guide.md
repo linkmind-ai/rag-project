@@ -78,9 +78,28 @@ GROQ_API_KEY_2=...          # KEY_1 rate limit 분산용 (없으면 KEY_1 fallba
 | 파일 | 건수 | 용도 |
 |------|-----:|------|
 | `golden_sets/golden_set_100.json` | 100 | 기본값, 표준 평가 |
-| `golden_sets/golden_set_138.json` | 138 | 확장 평가 |
+| `golden_sets/golden_set_138.json` | 138 | 확장 평가 (1~100: 자동생성, 101~138: 수작업) |
 | `golden_sets/golden_set_mrc.json` | — | MRC 도메인 특화 |
 | `golden_sets/golden_set.json` | — | 레거시 |
+
+> **⚠️ 수작업 데이터 작성 규칙**
+>
+> `reference_contexts`는 반드시 **`list[str]`** 형식으로 작성해야 합니다.  
+> `list[list[str]]`(중첩 배열)로 작성하면 RAGAS `SingleTurnSample` 생성 시 `ValidationError`가 발생하여 전체 테스트가 실패합니다.
+>
+> ```json
+> // ✅ 올바른 형식
+> { "reference_contexts": ["컨텍스트 문자열1", "컨텍스트 문자열2"] }
+>
+> // ❌ 잘못된 형식 (중첩 배열)
+> { "reference_contexts": [["컨텍스트 문자열1", "컨텍스트 문자열2"]] }
+> ```
+>
+> 추가 후 검증:
+> ```python
+> rc = item["reference_contexts"]
+> assert all(isinstance(s, str) for s in rc), "reference_contexts 원소가 str이 아님"
+> ```
 
 ---
 
@@ -178,6 +197,7 @@ python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets
 |------|--------|-----------|-------|:------------:|:---------------:|:----------------:|:-------------:|------|
 | 2026-04-03 | Youngman Kim | golden_set_5 (5건) | qwen2.5:72b | ✅ 100.0% | ✅ 70.2% | ✅ 80.0% | ✅ 80.0% | 로직 검증용 (소규모) |
 | 2026-04-03 | Youngman Kim | golden_set_100 (100건) | qwen2.5:72b | ✅ 85.5% | ❌ 60.4% | ❌ 60.0% | ❌ 60.1% | 최초 정식 평가 / 웹검색 37건(37%) / 평균 25.8s/쿼리 |
+| 2026-04-04 | Youngman Kim | golden_set_138 (138건) | qwen2.5:72b | ✅ 80.9% | ❌ 57.5% | ❌ 61.2% | ❌ 54.1% | 확장 평가 / 101~138번 벡터DB 미보유 수작업 데이터 포함 / 웹검색 73건(52.9%) / 평균 24.4s/쿼리 |
 
 ### 미달 항목 개선 이력
 
@@ -186,6 +206,9 @@ python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets
 | 2026-04-03 | ContextPrecision | 60.0% | 관련 없는 문서가 상위 검색됨 (웹검색 fallback 37%) | — | — |
 | 2026-04-03 | AnswerRelevancy | 60.4% | 답변이 질문과 직접 연결되지 않음 | — | — |
 | 2026-04-03 | ContextRecall | 60.1% | 필요한 청크가 검색에서 누락됨 | — | — |
+| 2026-04-04 | — (데이터 버그) | — | `golden_set_138` 101~138번 수작업 항목의 `reference_contexts`가 `list[list[str]]`로 잘못 작성 → RAGAS `ValidationError`로 전체 테스트 실패 | `golden_set_138.json` 38개 항목 평탄화 (`list[str]`로 수정) | ✅ 구조 정상화 |
+| 2026-04-04 | ContextRecall | 54.1% | 101~138번 수작업 데이터가 벡터DB 미보유 → 웹검색 fallback 52.9% (100건 대비 +15.9%p) → 웹검색 결과 품질 저하 | — | — |
+| 2026-04-04 | AnswerRelevancy | 57.5% | 웹검색 경로 답변이 질문과 직접 연결되지 않음 (웹검색 비율 증가 영향) | — | — |
 
 ---
 
