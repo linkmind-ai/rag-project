@@ -15,11 +15,16 @@ LinkMind는 개인 Notion 문서를 기반으로 한 **지능형 RAG 시스템**
 
 ## 주요 특징
 
-- **하이브리드 검색**: Vector 유사도 + BM25 키워드 검색 결합
-- **Corrective RAG 파이프라인**: 쿼리와 문서의 관련성을 기반으로 쿼리를 web search 또는 generate 단계로 routing 
-- **멀티턴 대화**: 세션 기반 대화 이력 관리
-- **Evidence 추적**: N3 노드의 하이브리드 로직으로 답변 근거 문서 식별
-- **비동기 처리**: FastAPI + aiohttp 기반 고성능 비동기 아키텍처
+- **하이브리드 검색**
+    : Vector 유사도와 BM25 키워드 검색을 결합하여 
+    semantic matching과 keyword precision을 동시에 확보하고 recall 저하 문제를 완화
+- **Corrective RAG 파이프라인**
+    : 쿼리와 문서의 관련성을 기반으로 query를 web search 또는 generation 단계로 routing하여 
+    fixed RAG pipeline의 한계를 보완하는 adaptive 구조 구현 
+- **멀티턴 대화**
+    : 세션 기반 대화 이력 관리를 통해 이전 문맥을 반영한 응답 생성
+- **비동기 처리**
+    : FastAPI + aiohttp 비동기 파이프라인으로 I/O 병목을 줄이고 latency를 최소화
 
 ## 아키텍처
 
