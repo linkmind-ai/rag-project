@@ -1,6 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
-from typing import Literal
 
 # 프롬프트에 적정 토큰수 적용하는 내용 추가 필요
 _GRADE_PROMPT = ChatPromptTemplate.from_messages(
@@ -12,11 +11,19 @@ _GRADE_PROMPT = ChatPromptTemplate.from_messages(
             문서에 질문과 관련된 키워드 또는 의미적으로 관련된 내용이 포함되어 있다면
             관련성이 있는 것으로 판단하세요.
 
-            반드시 아래 JSON 형식으로만 답하세요.
+            다음 기준에 따라 0과 1 사이의 실수로 점수를 부여하세요:
 
-            {{"binary_score": "yes"}} 또는 {{"binary_score": "no"}}
+            - 0에 가까움: 질문과 거의 관련 없음
+            - 0.2~0.4: 일부 키워드 또는 약한 의미적 관련성 있음
+            - 0.4~0.7: 부분적으로 관련 있으며 답변에 도움 될 수 있음
+            - 0.7~1.0: 질문에 직접적으로 관련 있고 핵심 정보 포함
 
-            추가 설명은 절대 하지 마세요.
+            중요:
+            - 0, 0.5, 1 같은 단순한 값만 사용하지 말고 0.23, 0.61, 0.78처럼 다양한 값을 사용하세요.
+            - 가능한 한 세밀하게 점수를 표현하세요.
+            
+            반드시 숫자 하나만 출력하세요.
+
             """,
         ),
         ("user", "검색된 문서:\n\n{document}\n\n사용자 질문: {query}"),
@@ -26,9 +33,7 @@ _GRADE_PROMPT = ChatPromptTemplate.from_messages(
 
 # 검색된 문서의 관련성 여부를 이진 점수로 평가하는 데이터 모델
 class GradeDocuments(BaseModel):
-    """검색된 문서의 관련성을 'yes' 또는 'no'로 판단하기 위한 이진 점수 모델."""
+    """검색된 문서와 질문의 관련도를 0~1 사이 점수로 평가"""
 
     # 문서가 질문과 관련이 있는지 여부를 'yes' 또는 'no'로 나타내는 필드
-    binary_score: Literal["yes", "no"] = Field(
-        description="문서가 질문과 관련이 있는지 여부 ('yes' 또는 'no')."
-    )
+    relevance: float = Field(description="문서와 질문의 관련도")

@@ -380,7 +380,7 @@ class RAGGraph:
         results = await asyncio.gather(*tasks)
 
         # 관련 문서 필터링
-        filtered_docs = [doc for doc, score in results if score.binary_score == "yes"]
+        filtered_docs = [doc for doc, score in results if score.relevance >= 0.3]
 
         # 관련 문서가 없으면 웹 검색 수행
         web_search = len(filtered_docs) == 0
