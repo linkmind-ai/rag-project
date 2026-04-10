@@ -1,5 +1,18 @@
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
+
+
+# 검색된 문서의 관련성 여부를 이진 점수로 평가하는 데이터 모델
+class GradeDocuments(BaseModel):
+    """검색된 문서와 질문의 관련도를 0~1 사이 점수로 평가"""
+
+    # 문서가 질문과 관련이 있는지 여부를 'yes' 또는 'no'로 나타내는 필드
+    relevance: float = Field(description="문서와 질문의 관련도")
+
+
+parser = PydanticOutputParser(pydantic_object=GradeDocuments)
+format_instructions = parser.get_format_instructions()
 
 # 프롬프트에 적정 토큰수 적용하는 내용 추가 필요
 _GRADE_PROMPT = ChatPromptTemplate.from_messages(
@@ -22,18 +35,10 @@ _GRADE_PROMPT = ChatPromptTemplate.from_messages(
             - 0, 0.5, 1 같은 단순한 값만 사용하지 말고 0.23, 0.61, 0.78처럼 다양한 값을 사용하세요.
             - 가능한 한 세밀하게 점수를 표현하세요.
             
-            반드시 숫자 하나만 출력하세요.
-
+            반드시 아래 형식 지침을 따라 출력하세요.
+            {format_instructions}
             """,
         ),
         ("user", "검색된 문서:\n\n{document}\n\n사용자 질문: {query}"),
     ]
-)
-
-
-# 검색된 문서의 관련성 여부를 이진 점수로 평가하는 데이터 모델
-class GradeDocuments(BaseModel):
-    """검색된 문서와 질문의 관련도를 0~1 사이 점수로 평가"""
-
-    # 문서가 질문과 관련이 있는지 여부를 'yes' 또는 'no'로 나타내는 필드
-    relevance: float = Field(description="문서와 질문의 관련도")
+).partial(format_instructions=format_instructions)

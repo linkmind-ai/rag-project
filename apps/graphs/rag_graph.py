@@ -30,7 +30,7 @@ from langchain.output_parsers import PydanticOutputParser
 from langchain_community.llms import Ollama
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from models.state import Document, GraphState, Message

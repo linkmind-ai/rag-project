@@ -30,7 +30,7 @@ class SearchRequest(BaseModel):
 
     query: str = Field(..., description="사용자 질의")
     top_k: int = Field(default=5, description="top_k 개수")
-    filter: dict[str, Any] | None = Field(None, description="메타데이터 필터")
+    filters: dict[str, Any] | None = Field(None, description="메타데이터 필터")
 
     model_config = ConfigDict(frozen=False)
 
