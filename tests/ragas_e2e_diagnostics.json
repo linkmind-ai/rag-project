@@ -1,15 +1,15 @@
 {
-  "saved_at": "2026-04-04T14:53:09.207666",
+  "saved_at": "2026-04-11T21:48:16.187827",
   "summary": {
     "total": 138,
-    "web_search_triggered_count": 73,
-    "web_search_triggered_ratio": 0.5289855072463768,
-    "avg_elapsed_time_s": 24.387826123099398
+    "web_search_triggered_count": 35,
+    "web_search_triggered_ratio": 0.2536231884057971,
+    "avg_elapsed_time_s": 19.087873477866683
   },
   "per_query": [
     {
       "index": 0,
-      "session_id": "ragas-e2e-cb905d0f-ae2d-4131-a619-09bb89dc571b",
+      "session_id": "ragas-e2e-8ddfc189-3e1d-442d-bb32-05ddfe94e077",
       "query": "Ken Liu의 2011년에 발표된 책 『역사에 종지부를 찍은 이들』에서 가장 마음을 사로잡은 이야기는 무엇이며, 그 이야기가 배경으로 하는 주요 사건은 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -17,12 +17,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 25.465118169784546
+      "context_count": 3,
+      "elapsed_time": 21.033092737197876
     },
     {
       "index": 1,
-      "session_id": "ragas-e2e-7bbdfaa1-acfb-4cb3-a3e8-d23550aa1aad",
+      "session_id": "ragas-e2e-27e61f5b-6e7e-4d0c-8524-d5a766f07de2",
       "query": "『역사에 종지부를 찍은 이들』에서 양자얽힘 현상을 이용한 장치가 가진 한계는 무엇이며, 이러한 한계가 역사적 가치에 미치는 영향에 대한 질문을 던지는 이유는 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -31,11 +31,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 16.94503879547119
+      "elapsed_time": 16.734228134155273
     },
     {
       "index": 2,
-      "session_id": "ragas-e2e-221972ab-e9c2-4c11-aaac-845b45b30575",
+      "session_id": "ragas-e2e-f2e32c2c-76fd-417b-bf35-e5605da3f3d9",
       "query": "『시뮬라크룸』의 핵심 테제는 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -44,11 +44,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 14.26760482788086
+      "elapsed_time": 15.274933099746704
     },
     {
       "index": 3,
-      "session_id": "ragas-e2e-2aedeab3-31c4-4d16-a255-4f6673faf8f9",
+      "session_id": "ragas-e2e-23dbce1e-3738-4397-9953-7b6b3bf56861",
       "query": "'시뮬라크룸' 소설에서 딸이 아버지를 질책하는 상황에 대한 설명은 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -57,11 +57,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 14.661401987075806
+      "elapsed_time": 15.864422798156738
     },
     {
       "index": 4,
-      "session_id": "ragas-e2e-078636f7-6f75-4723-af43-bef3860d940a",
+      "session_id": "ragas-e2e-c47cb474-2410-4ba7-ae4c-75bb953988a1",
       "query": "『캣 콜링』의 주요 줄거리에 대한 설명으로 가장 적절한 것은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -70,256 +70,65 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 32.94600176811218
+      "elapsed_time": 22.90313696861267
     },
     {
       "index": 5,
-      "session_id": "ragas-e2e-d9bc6ef1-7643-43f6-b04a-f6becaffaf18",
+      "session_id": "ragas-e2e-92da72d0-47c4-4558-aa84-811679af4187",
       "query": "'파(the waves)'에서 인류의 진화 과정에 대한 설명으로 옳지 않은 것은 무엇입니까?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 31.878241062164307
+      "elapsed_time": 19.08477520942688
     },
     {
       "index": 6,
-      "session_id": "ragas-e2e-1fbace4d-bb6b-43d3-a620-02d1eb68be76",
+      "session_id": "ragas-e2e-c47835a4-03fd-425e-af7f-6da527b92355",
       "query": "‘암흑뉴런’이 뇌 기능에서 어떤 역할을 하는지 설명하시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        1
+        0
       ],
       "evidence_doc_count": 1,
       "context_count": 2,
-      "elapsed_time": 20.244234085083008
+      "elapsed_time": 17.50394296646118
     },
     {
       "index": 7,
-      "session_id": "ragas-e2e-e3b996c3-c6d1-4635-8044-172d45e9d37a",
+      "session_id": "ragas-e2e-0dd4d493-cb9c-4e01-8f6e-71727861aa50",
       "query": "스파이크의 전달 속도와 발생 속도에 차이가 있는 이유는 무엇이며, 이 차이가 뇌 기능에 어떤 영향을 미치는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        2
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.02672791481018
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 21.64683485031128
     },
     {
       "index": 8,
-      "session_id": "ragas-e2e-8038a8d8-3d7f-4799-900c-0287f2d429c1",
+      "session_id": "ragas-e2e-2d230adb-5f6c-40d0-8946-9f27cd223aef",
       "query": "정본 백석 시집의 주요 특징으로 언급된 점은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        1
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.46388602256775
+      "context_count": 2,
+      "elapsed_time": 19.313260078430176
     },
     {
       "index": 9,
-      "session_id": "ragas-e2e-c6982431-3a98-4e86-a748-50494fa2132b",
+      "session_id": "ragas-e2e-cbfd9366-eed6-47f9-9de2-9973d0806f6d",
       "query": "정본 백석 시집이 추천하는 독자층은 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0,
-        1
-      ],
-      "evidence_doc_count": 2,
-      "context_count": 2,
-      "elapsed_time": 20.906590938568115
-    },
-    {
-      "index": 10,
-      "session_id": "ragas-e2e-cf8b412a-4469-4371-8a30-aff3609001b2",
-      "query": "백석의 시집 ‘천억원도 백석의 시 한줄에 못하다’가 시주한 길상사를 만든 자야는 어떤 지역 출신이었는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 24.919003009796143
-    },
-    {
-      "index": 11,
-      "session_id": "ragas-e2e-e54142a9-eefb-49b3-bd16-674a803336d5",
-      "query": "백석의 시를 읽는 데 어려움을 겪는 독자들이 주로 겪는 어려움은 무엇이며, 이를 극복하기 위해 어떤 방법을 사용하는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 20.808273792266846
-    },
-    {
-      "index": 12,
-      "session_id": "ragas-e2e-4400350b-a773-47fd-82fc-48447647e3af",
-      "query": "캣 콜링 시집의 저자 이름과, 시집에 등장하는 두 형제의 이름은 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.00810980796814
-    },
-    {
-      "index": 13,
-      "session_id": "ragas-e2e-08ebf119-50bb-4a61-8384-eafc06b0c22d",
-      "query": "이소호 시인의 시집에 대한 리뷰에서, 시집이 난해한 이유를 설명한 내용을 간략하게 요약하십시오.",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0,
-        1
-      ],
-      "evidence_doc_count": 2,
-      "context_count": 2,
-      "elapsed_time": 22.27326798439026
-    },
-    {
-      "index": 14,
-      "session_id": "ragas-e2e-68f557e5-734c-42b4-9c59-ec225f226265",
-      "query": "김승희 시인이 언급한 1970년대~1980년대 시인과 독자의 관계에 대한 주장은 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.43008589744568
-    },
-    {
-      "index": 15,
-      "session_id": "ragas-e2e-d6b0e509-c0d5-442d-b4c0-0ba138a80fa7",
-      "query": "‘우리는 낯선 사람의 눈빛이 무서워’ 시가 특별한 형식으로 사용된 이유가 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 34.25879216194153
-    },
-    {
-      "index": 16,
-      "session_id": "ragas-e2e-037814d9-aff0-441a-a876-18f47d79b534",
-      "query": "스파이크 책의 저자가 뇌의 어떤 기능을 묘사하는 OS 사용설명서로 비유했는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 2,
-      "elapsed_time": 18.285166025161743
-    },
-    {
-      "index": 17,
-      "session_id": "ragas-e2e-e023b1c2-c94d-47ef-b10d-624c59ece183",
-      "query": "스파이크 책에 대한 리뷰에서, 이 책이 재미있다고 생각하는 사람들의 특징은 무엇인가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.514677047729492
-    },
-    {
-      "index": 18,
-      "session_id": "ragas-e2e-8d33f571-50e3-43e4-b6cb-ce5ac137af17",
-      "query": "『빌리지 이펙트』의 저자는 누구이며, 책의 주요 내용을 한 문장으로 요약하시오.",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 25.43905806541443
-    },
-    {
-      "index": 19,
-      "session_id": "ragas-e2e-a2d06833-8b30-4fd5-8dff-a1c51fb335e3",
-      "query": "'빌리지 이펙트'에서 언급된 옥시토신이 어떤 효과를 가지며, 이는 온라인 학습과 비교하여 어떤 차이를 보이는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0,
-        1
-      ],
-      "evidence_doc_count": 2,
-      "context_count": 2,
-      "elapsed_time": 19.5242817401886
-    },
-    {
-      "index": 20,
-      "session_id": "ragas-e2e-b2dc2481-faf3-4044-9332-40d372b28812",
-      "query": "『책 제목』에서 언급된 ‘핑커의 놀람’이 스마트폰과 AI의 등장 이후 어떤 의미를 갖게 되었습니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 23.24943518638611
-    },
-    {
-      "index": 21,
-      "session_id": "ragas-e2e-093f14a8-cd35-406f-b0b7-a7a662bb286b",
-      "query": "『나는 돈이 없어도 사업을 한다』에서 저자는 어떤 방식으로 사업을 시작했는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.535277128219604
-    },
-    {
-      "index": 22,
-      "session_id": "ragas-e2e-67447cc4-647b-4e28-83ec-b236c569b82c",
-      "query": "『나는 돈이 없어도 사업을 한다』에서 제시하는 스타트업의 특징은 무엇인가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 20.140049934387207
-    },
-    {
-      "index": 23,
-      "session_id": "ragas-e2e-07349df6-ea4a-4ad1-a8ff-ac5bd2310677",
-      "query": "종이 동물원 책에서 저자는 어떤 방식으로 아이디어를 발굴하도록 조언하는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.692571878433228
-    },
-    {
-      "index": 24,
-      "session_id": "ragas-e2e-028e52fc-9d27-495a-94ed-8c6c7ed33dd6",
-      "query": "종이 동물원 책에서 신속한 시작을 위해 강조하는 핵심 사항은 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -327,38 +136,25 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 3,
-      "elapsed_time": 23.824306964874268
+      "elapsed_time": 21.47156810760498
     },
     {
-      "index": 25,
-      "session_id": "ragas-e2e-63378e89-1477-42c5-a6eb-ffc641dc1f4e",
-      "query": "‘종이동물원’ 단편집이 국제적인 문학상을 동시에 석권한 최초의 작품으로 기록된 것은 무엇인가?",
+      "index": 10,
+      "session_id": "ragas-e2e-d36a78a0-c504-43e2-ac64-75723db2b633",
+      "query": "백석의 시집 ‘천억원도 백석의 시 한줄에 못하다’가 시주한 길상사를 만든 자야는 어떤 지역 출신이었는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.522719860076904
+      "context_count": 2,
+      "elapsed_time": 16.863044023513794
     },
     {
-      "index": 26,
-      "session_id": "ragas-e2e-7656dddb-651a-4c5d-8586-647ef69f47e6",
-      "query": "켄 리우가 작가로서 성공하기까지 무명시절을 버텨낸 작품의 이름은 무엇이며, 이 작품이 그를 널리 알리는 데 기여한 특별한 이유는 무엇인가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 27.970508098602295
-    },
-    {
-      "index": 27,
-      "session_id": "ragas-e2e-f8694bbe-c4f8-4990-8544-9bff9ded4694",
-      "query": "넥스트 커머스 책에서 저자는 어떤 커머스 산업의 구조를 살피고 대응하는 흐름을 짚어봅니까?",
+      "index": 11,
+      "session_id": "ragas-e2e-8b149c78-63aa-4b57-8b0f-6b04657efd91",
+      "query": "백석의 시를 읽는 데 어려움을 겪는 독자들이 주로 겪는 어려움은 무엇이며, 이를 극복하기 위해 어떤 방법을 사용하는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -367,25 +163,12 @@
       ],
       "evidence_doc_count": 2,
       "context_count": 2,
-      "elapsed_time": 20.568938970565796
+      "elapsed_time": 20.174349069595337
     },
     {
-      "index": 28,
-      "session_id": "ragas-e2e-d8aed331-13d0-4082-bfe9-0a580b35d6e2",
-      "query": "책의 분류는 어떤 내용을 중심으로 이루어져 있으며, 그 분류가 인상적인 이유가 무엇인가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 23.01729917526245
-    },
-    {
-      "index": 29,
-      "session_id": "ragas-e2e-3f8a5cc5-9252-42e9-be55-1969f13859f2",
-      "query": "대형 플랫폼이 데이터를 활용하여 개별 브랜드를 압살하는 과정에 대한 책의 설명은 무엇인가?",
+      "index": 12,
+      "session_id": "ragas-e2e-dccbeeb0-4a9b-4d68-a7ef-41115617a26d",
+      "query": "캣 콜링 시집의 저자 이름과, 시집에 등장하는 두 형제의 이름은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -393,38 +176,51 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 2,
-      "elapsed_time": 21.63732600212097
+      "elapsed_time": 16.99542212486267
     },
     {
-      "index": 30,
-      "session_id": "ragas-e2e-4c8a2c95-6f0f-469d-9394-5f4815d26aa4",
-      "query": "『공산주의자가 온다』의 작가 이신주가 수상한 것은 언제부터인가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 30.931178092956543
-    },
-    {
-      "index": 31,
-      "session_id": "ragas-e2e-e9c0f581-f689-4e92-82fb-612c55ab096e",
-      "query": "『공산주의자가 온다』의 세계관을 구성하는 방식에 대해 설명하시오.",
+      "index": 13,
+      "session_id": "ragas-e2e-5c138372-6ba7-415d-bdec-07c00bb38f31",
+      "query": "이소호 시인의 시집에 대한 리뷰에서, 시집이 난해한 이유를 설명한 내용을 간략하게 요약하십시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.340110301971436
+      "context_count": 3,
+      "elapsed_time": 21.51328206062317
     },
     {
-      "index": 32,
-      "session_id": "ragas-e2e-592ffad1-cf75-4d6f-aa16-d477cf29909d",
-      "query": "이신주 작가의 SF 작품이 가진 특징은 무엇인가?",
+      "index": 14,
+      "session_id": "ragas-e2e-06a8b155-dd91-4d9a-ba15-1f5abbe5b8fe",
+      "query": "김승희 시인이 언급한 1970년대~1980년대 시인과 독자의 관계에 대한 주장은 무엇입니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 18.784060955047607
+    },
+    {
+      "index": 15,
+      "session_id": "ragas-e2e-52dd8a91-62c7-4ea4-ad81-9a3d6c8f14e2",
+      "query": "‘우리는 낯선 사람의 눈빛이 무서워’ 시가 특별한 형식으로 사용된 이유가 무엇입니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 20.237916946411133
+    },
+    {
+      "index": 16,
+      "session_id": "ragas-e2e-5abb75d8-f94d-4fbe-bee8-231d50939a5c",
+      "query": "스파이크 책의 저자가 뇌의 어떤 기능을 묘사하는 OS 사용설명서로 비유했는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -434,11 +230,224 @@
       ],
       "evidence_doc_count": 3,
       "context_count": 3,
-      "elapsed_time": 24.77862024307251
+      "elapsed_time": 19.816797971725464
+    },
+    {
+      "index": 17,
+      "session_id": "ragas-e2e-baa0d4a9-4646-4c55-b318-e2f60f5a9894",
+      "query": "스파이크 책에 대한 리뷰에서, 이 책이 재미있다고 생각하는 사람들의 특징은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 20.43918490409851
+    },
+    {
+      "index": 18,
+      "session_id": "ragas-e2e-57fbcdc4-2a01-469f-9207-d34f18e10923",
+      "query": "『빌리지 이펙트』의 저자는 누구이며, 책의 주요 내용을 한 문장으로 요약하시오.",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 20.147130966186523
+    },
+    {
+      "index": 19,
+      "session_id": "ragas-e2e-2410d6b8-d735-471e-a28b-233c730a77a7",
+      "query": "'빌리지 이펙트'에서 언급된 옥시토신이 어떤 효과를 가지며, 이는 온라인 학습과 비교하여 어떤 차이를 보이는가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 16.42403817176819
+    },
+    {
+      "index": 20,
+      "session_id": "ragas-e2e-f32e2e58-74d7-4d43-828f-f8c61110efc6",
+      "query": "『책 제목』에서 언급된 ‘핑커의 놀람’이 스마트폰과 AI의 등장 이후 어떤 의미를 갖게 되었습니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 1,
+      "elapsed_time": 9.723124265670776
+    },
+    {
+      "index": 21,
+      "session_id": "ragas-e2e-938d0698-cc3c-41ee-bbce-2fc16a498d29",
+      "query": "『나는 돈이 없어도 사업을 한다』에서 저자는 어떤 방식으로 사업을 시작했는가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 13.021239995956421
+    },
+    {
+      "index": 22,
+      "session_id": "ragas-e2e-8f509f95-9f1c-4b28-ad7e-d0dea0e9d398",
+      "query": "『나는 돈이 없어도 사업을 한다』에서 제시하는 스타트업의 특징은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 17.786363124847412
+    },
+    {
+      "index": 23,
+      "session_id": "ragas-e2e-037f1ab9-b43c-473c-9480-308053c8ca71",
+      "query": "종이 동물원 책에서 저자는 어떤 방식으로 아이디어를 발굴하도록 조언하는가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 15.441532135009766
+    },
+    {
+      "index": 24,
+      "session_id": "ragas-e2e-cbd818c0-fcae-40b4-ae81-8275c515e45c",
+      "query": "종이 동물원 책에서 신속한 시작을 위해 강조하는 핵심 사항은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 15.21810507774353
+    },
+    {
+      "index": 25,
+      "session_id": "ragas-e2e-799ddf54-2ffa-4418-a0a9-d55f79e9925e",
+      "query": "‘종이동물원’ 단편집이 국제적인 문학상을 동시에 석권한 최초의 작품으로 기록된 것은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 13.574996948242188
+    },
+    {
+      "index": 26,
+      "session_id": "ragas-e2e-81e7dea7-04b7-4edd-816d-276f4833e834",
+      "query": "켄 리우가 작가로서 성공하기까지 무명시절을 버텨낸 작품의 이름은 무엇이며, 이 작품이 그를 널리 알리는 데 기여한 특별한 이유는 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 18.74668288230896
+    },
+    {
+      "index": 27,
+      "session_id": "ragas-e2e-bd711877-7ecf-4c48-9d25-edbf43901c10",
+      "query": "넥스트 커머스 책에서 저자는 어떤 커머스 산업의 구조를 살피고 대응하는 흐름을 짚어봅니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 12.92471194267273
+    },
+    {
+      "index": 28,
+      "session_id": "ragas-e2e-61df9855-efb1-4474-b912-756635adcd25",
+      "query": "책의 분류는 어떤 내용을 중심으로 이루어져 있으며, 그 분류가 인상적인 이유가 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 15.345008850097656
+    },
+    {
+      "index": 29,
+      "session_id": "ragas-e2e-a413fca2-106b-4b2e-8f3e-ac56371fe727",
+      "query": "대형 플랫폼이 데이터를 활용하여 개별 브랜드를 압살하는 과정에 대한 책의 설명은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 18.335886001586914
+    },
+    {
+      "index": 30,
+      "session_id": "ragas-e2e-4a950e91-25dd-484e-b5f3-40e86ad3bc8c",
+      "query": "『공산주의자가 온다』의 작가 이신주가 수상한 것은 언제부터인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": true,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
+      "context_count": 1,
+      "elapsed_time": 22.64139699935913
+    },
+    {
+      "index": 31,
+      "session_id": "ragas-e2e-129abb38-5145-4725-967b-dd6e1d32ce96",
+      "query": "『공산주의자가 온다』의 세계관을 구성하는 방식에 대해 설명하시오.",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        1,
+        2
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 22.159164905548096
+    },
+    {
+      "index": 32,
+      "session_id": "ragas-e2e-4f661cf8-f585-44b0-98e8-0b2e2fb4e0e7",
+      "query": "이신주 작가의 SF 작품이 가진 특징은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 25.598389625549316
     },
     {
       "index": 33,
-      "session_id": "ragas-e2e-b0be1b1c-3daa-4fd5-9f3a-46231d34e3ac",
+      "session_id": "ragas-e2e-90bf8e4a-cbde-4254-93cb-c2180e2360d6",
       "query": "'단일성 정체감 장애'라는 설정이 이 작품에서 보여주는 핵심적인 메시지는 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -447,38 +456,55 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 20.36910390853882
+      "elapsed_time": 17.807209968566895
     },
     {
       "index": 34,
-      "session_id": "ragas-e2e-fc0d641e-3726-4859-90d5-6a56ecb79d03",
+      "session_id": "ragas-e2e-4876d3c3-2a60-43ed-b85a-b860d690ce93",
       "query": "‘스파이크’라는 책에서 월터 피츠(Walter Pitts)가 밝힌 뇌의 기능이 컴퓨터로 모사된 방식에 대한 핵심 내용을 설명하시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1,
+        2
       ],
-      "evidence_doc_count": 1,
+      "evidence_doc_count": 3,
       "context_count": 3,
-      "elapsed_time": 23.053119897842407
+      "elapsed_time": 20.51441526412964
     },
     {
       "index": 35,
-      "session_id": "ragas-e2e-acc14223-37a7-48d2-89b0-791cd98553ac",
+      "session_id": "ragas-e2e-446c18cf-5fa9-48e7-95ca-c5aa628c5455",
       "query": "‘스파이크’ 책에서 맥컬럭(McCullock)이 발견한 뉴런의 스파이크(spike)의 특성에 대한 내용을 간략하게 요약하시오.",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1,
+        2
+      ],
+      "evidence_doc_count": 3,
+      "context_count": 3,
+      "elapsed_time": 19.98410701751709
+    },
+    {
+      "index": 36,
+      "session_id": "ragas-e2e-2a187d97-f9cb-4c67-8a73-f3ad0e4a1d5e",
+      "query": "책 ‘암흑 뉴런과 자발적 스파이크’에서 설명하는 ‘암흑 뉴런’의 역할은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
         1
       ],
       "evidence_doc_count": 1,
-      "context_count": 2,
-      "elapsed_time": 18.969587326049805
+      "context_count": 3,
+      "elapsed_time": 19.3198139667511
     },
     {
-      "index": 36,
-      "session_id": "ragas-e2e-9e6bd88f-b606-4d4e-9b56-003c6d8bdd44",
-      "query": "책 ‘암흑 뉴런과 자발적 스파이크’에서 설명하는 ‘암흑 뉴런’의 역할은 무엇입니까?",
+      "index": 37,
+      "session_id": "ragas-e2e-083ed722-1a61-459c-b055-9e0fb09e0db3",
+      "query": "책에서 제시하는 ‘자발적 스파이크’가 뇌과학에서 말하는 ‘진화적 이득’과 어떤 관련이 있습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -487,12 +513,25 @@
       ],
       "evidence_doc_count": 2,
       "context_count": 3,
-      "elapsed_time": 23.571840047836304
+      "elapsed_time": 20.3276629447937
     },
     {
-      "index": 37,
-      "session_id": "ragas-e2e-2c0cc268-f85c-49b8-849e-b7356aa41353",
-      "query": "책에서 제시하는 ‘자발적 스파이크’가 뇌과학에서 말하는 ‘진화적 이득’과 어떤 관련이 있습니까?",
+      "index": 38,
+      "session_id": "ragas-e2e-c5f58b91-7241-4b6b-ae91-2c3928272648",
+      "query": "백석 시의 특징 중 표준어를 구사하고, 실제 그의 시가 표준어로 되어 있는 점은 무엇과 관련이 있습니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 23.33425784111023
+    },
+    {
+      "index": 39,
+      "session_id": "ragas-e2e-995c83c5-7ff7-4837-a945-d25157093032",
+      "query": "백석의 기행시에 나타난 특징은 무엇이며, 그 특징이 어떤 효과를 내습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -501,75 +540,67 @@
       ],
       "evidence_doc_count": 2,
       "context_count": 2,
-      "elapsed_time": 21.376697063446045
-    },
-    {
-      "index": 38,
-      "session_id": "ragas-e2e-d3b85a5d-02fe-4920-bc87-18589792449b",
-      "query": "백석 시의 특징 중 표준어를 구사하고, 실제 그의 시가 표준어로 되어 있는 점은 무엇과 관련이 있습니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 46.131892919540405
-    },
-    {
-      "index": 39,
-      "session_id": "ragas-e2e-c3ff543e-c9a9-452e-9544-b23b39fc34e7",
-      "query": "백석의 기행시에 나타난 특징은 무엇이며, 그 특징이 어떤 효과를 내습니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 2,
-      "elapsed_time": 67.82422661781311
+      "elapsed_time": 18.018388032913208
     },
     {
       "index": 40,
-      "session_id": "ragas-e2e-3fad8271-c853-4c3d-ad9b-9da73c53e421",
+      "session_id": "ragas-e2e-b64e01cf-70ae-464c-a10e-62a27be00cc0",
       "query": "『어쩐지 미술에서 뇌과학이 보인다』에서 연령차별이 개인에게 미치는 부정적인 영향은 무엇인가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        2
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 28.891231060028076
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 21.8436541557312
     },
     {
       "index": 41,
-      "session_id": "ragas-e2e-ac06c540-f34e-4be2-a373-ac7486238416",
+      "session_id": "ragas-e2e-ff4b1a6b-2ab0-4fad-87cd-4597cd60482a",
       "query": "'어쩐지 미술에서 뇌과학이 보인다'에서 저자가 이상향으로 삼는 아시아와 한국의 노년 인식 차이에 대한 주장은 무엇인가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 29.015550136566162
+      "web_search_triggered": false,
+      "evidence_indices": [
+        1
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 19.47999095916748
     },
     {
       "index": 42,
-      "session_id": "ragas-e2e-83e910e8-6407-410b-9a51-6ee5ecb40106",
+      "session_id": "ragas-e2e-62ac076d-a72d-4e43-830e-3760923060ef",
       "query": "에릭 캔들이 저술한 ‘내가 된다는 것’에서 언급하는 ‘지각이 제어된 환각’이란 무엇인가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        2
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 29.581804037094116
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 22.00941801071167
     },
     {
       "index": 43,
-      "session_id": "ragas-e2e-708e93e3-a62b-4b14-92a5-30f4d6cd251f",
+      "session_id": "ragas-e2e-77525e14-39ce-4dfd-ad50-0ca65b95986c",
       "query": "‘어쩐지 미술에서 뇌과학이 보인다’ 책에서 추상화가 뇌과학 이론에 기반한 추상미술의 원리를 활용하는 방식은 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        2
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 20.83392906188965
+    },
+    {
+      "index": 44,
+      "session_id": "ragas-e2e-fa9fd8e8-d837-40ba-9b6c-6ba624728909",
+      "query": "이중 구상(figuration)과 추상화의 차이점을 설명하시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -578,24 +609,11 @@
       ],
       "evidence_doc_count": 2,
       "context_count": 3,
-      "elapsed_time": 24.648590803146362
-    },
-    {
-      "index": 44,
-      "session_id": "ragas-e2e-6da98681-6fd5-41e8-b9e7-5f687b538569",
-      "query": "이중 구상(figuration)과 추상화의 차이점을 설명하시오.",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.40172505378723
+      "elapsed_time": 25.265563011169434
     },
     {
       "index": 45,
-      "session_id": "ragas-e2e-e94dbc3b-e723-460b-b341-6eed549b6e1b",
+      "session_id": "ragas-e2e-48950d3e-16f4-456b-9f85-6c9525b5f65c",
       "query": "사진의 등장 이후 미술계의 변화와 그 영향을 설명하시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -603,12 +621,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.79340696334839
+      "context_count": 2,
+      "elapsed_time": 14.45401120185852
     },
     {
       "index": 46,
-      "session_id": "ragas-e2e-1156c5ba-87b8-434b-8e66-b6cd3caa5bd7",
+      "session_id": "ragas-e2e-17fb4e60-6fbf-4595-82a7-b053acc8642a",
       "query": "워홀(Warhole)에서 만개한 팝아트의 특징은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -618,22 +636,22 @@
       ],
       "evidence_doc_count": 2,
       "context_count": 2,
-      "elapsed_time": 19.00077986717224
+      "elapsed_time": 10.920691013336182
     },
     {
       "index": 47,
-      "session_id": "ragas-e2e-3851a49a-499e-4c6a-9771-dd6844ed5d47",
+      "session_id": "ragas-e2e-b925db0c-c08e-41aa-a7c1-da53e2373c5b",
       "query": "'미학의 뇌'처럼 뇌과학과 미술의 융합이 아쉬웠던 점은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 15.576415061950684
+      "elapsed_time": 8.01643419265747
     },
     {
       "index": 48,
-      "session_id": "ragas-e2e-7280b134-017a-4268-93a6-ec014bb2a58c",
+      "session_id": "ragas-e2e-64bac191-3698-4fcf-bcfd-78eb1341fe2b",
       "query": "책 제목 ‘길들은 다 일가친척이다’에서 함민복 시인이 길을 통해 무엇을 보여주고 있습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -641,49 +659,47 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.85941505432129
+      "context_count": 2,
+      "elapsed_time": 14.008377075195312
     },
     {
       "index": 49,
-      "session_id": "ragas-e2e-3e9ef88f-97e4-410c-9442-e0da441cc5bd",
+      "session_id": "ragas-e2e-27f102a4-84c9-4a1b-a300-ceb9dbc64126",
       "query": "함시인이 강화도로 이주한 후 그의 글쓰기 스타일 변화에 대한 설명으로 옳지 않은 것은 무엇인가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 24.000630140304565
+      "elapsed_time": 8.336854934692383
     },
     {
       "index": 50,
-      "session_id": "ragas-e2e-d5bcaafb-3221-4cb2-96e4-16ab3bd68af7",
+      "session_id": "ragas-e2e-39cf65b1-7a03-4da2-ac2c-67d9bdf18026",
       "query": "함민복 시인이 ‘나의 여집합인 나’ 시를 통해 아버지에 대한 시의 내용을 어떻게 해석했는가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 32.13755917549133
+      "context_count": 3,
+      "elapsed_time": 18.63504719734192
     },
     {
       "index": 51,
-      "session_id": "ragas-e2e-5c695435-1493-45b9-8583-d9cbb0539f82",
+      "session_id": "ragas-e2e-b8d0ae79-3f10-426d-a619-8f70426fe290",
       "query": "비유물론 책에서 언급된 ‘죽었던 자가 다시 살아나는 코리안 시리즈’는 어떤 특징을 가지고 있습니까?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 24.195005178451538
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
+      "context_count": 2,
+      "elapsed_time": 11.214538335800171
     },
     {
       "index": 52,
-      "session_id": "ragas-e2e-5497ab0a-3555-4f63-a250-f640695f20c8",
+      "session_id": "ragas-e2e-8704d53c-7d3e-421e-9257-61b183f26047",
       "query": "ANT(행위자 네트워크 이론)가 객체(object) 개념을 도입하여 어떻게 이론을 보완하는지 설명하시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -692,12 +708,12 @@
         1
       ],
       "evidence_doc_count": 2,
-      "context_count": 2,
-      "elapsed_time": 24.305565118789673
+      "context_count": 3,
+      "elapsed_time": 17.08972692489624
     },
     {
       "index": 53,
-      "session_id": "ragas-e2e-40548fa7-cd2b-4e14-b49c-78feab8ff377",
+      "session_id": "ragas-e2e-cbb2a282-16f3-4c1d-b394-04358028e60f",
       "query": "인류원리에 대한 칼 튕기기 논쟁에서 본진은 어떤 주장을 펼쳤습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -705,72 +721,62 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.655581951141357
+      "context_count": 2,
+      "elapsed_time": 15.1661057472229
     },
     {
       "index": 54,
-      "session_id": "ragas-e2e-68a285d3-71e1-4940-88fe-bb935cec35f7",
+      "session_id": "ragas-e2e-a0119984-0c2c-477a-b6cb-2c48c2ccf38b",
       "query": "다중우주론이 도입되는 이유와 그 주된 문제점을 설명하시오.",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 32.572511196136475
+      "elapsed_time": 11.305968761444092
     },
     {
       "index": 55,
-      "session_id": "ragas-e2e-96ea2f2a-b296-42d2-bde3-f8dc0a96663d",
+      "session_id": "ragas-e2e-94bc4109-ad02-45ac-a52d-7eab9ae56320",
       "query": "헤지펀드 열전에서 언급된 철학자 중, 우주론 연구에 참여하여 개념을 다시 새겨보는 학자의 사례와 관련된 주요 개념은 무엇입니까?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [],
       "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 28.245357036590576
+      "context_count": 2,
+      "elapsed_time": 11.612996101379395
     },
     {
       "index": 56,
-      "session_id": "ragas-e2e-719aaf16-cf6a-4da6-af41-36e48c273785",
+      "session_id": "ragas-e2e-a66db295-982e-41ec-928f-d731da6767c3",
       "query": "책 ‘헤지펀드 열전’에서 우주론 연구의 어려움을 설명하는 핵심적인 부분은 무엇이며, 이 어려움을 극복하기 위한 방법은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 26.792165279388428
+      "elapsed_time": 20.972307920455933
     },
     {
       "index": 57,
-      "session_id": "ragas-e2e-7ae84c06-df47-46b4-a7b3-10d1f6016a98",
+      "session_id": "ragas-e2e-65f491b6-59eb-4a25-992e-9b1db7e60ecf",
       "query": "헤지펀드의 특징을 설명하는 저자의 주장을 요약하면 어떻게 되겠습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 20.65422487258911
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 16.84103226661682
     },
     {
       "index": 58,
-      "session_id": "ragas-e2e-f6464856-fe8c-441c-be08-abb8bba44348",
+      "session_id": "ragas-e2e-dcd98d0a-31fa-47ae-a736-6f4b1f8dc770",
       "query": "세바스천 말라비가 어떤 언론사에서 활동했습니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 24.855895042419434
-    },
-    {
-      "index": 59,
-      "session_id": "ragas-e2e-75c15a02-a07f-4a26-9f6e-35d024e8ea12",
-      "query": "『나이가 든다는 착각』에서 언급된 동인도 회사 객체의 결정적 공생은 어떤 세 가지 형태로 나타났습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [
@@ -778,37 +784,51 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 24.706576824188232
+      "elapsed_time": 20.503679990768433
     },
     {
-      "index": 60,
-      "session_id": "ragas-e2e-30d26b80-4803-4332-9b9f-e7b77891846e",
-      "query": "하먼이 강조한 ‘관계 자체가 복합 객체다’라는 개념이 『나이가 든다는 착각』에서 제시하는 역사적 관점과 어떤 관련이 있습니까?",
+      "index": 59,
+      "session_id": "ragas-e2e-5b22111d-cf18-45aa-b66a-cb8b2d1d8f25",
+      "query": "『나이가 든다는 착각』에서 언급된 동인도 회사 객체의 결정적 공생은 어떤 세 가지 형태로 나타났습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 21.339403867721558
+      "context_count": 3,
+      "elapsed_time": 20.411299228668213
+    },
+    {
+      "index": 60,
+      "session_id": "ragas-e2e-909f0600-5a13-4a7f-ad38-85a084d0dc4c",
+      "query": "하먼이 강조한 ‘관계 자체가 복합 객체다’라는 개념이 『나이가 든다는 착각』에서 제시하는 역사적 관점과 어떤 관련이 있습니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        1
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 3,
+      "elapsed_time": 30.559027910232544
     },
     {
       "index": 61,
-      "session_id": "ragas-e2e-263eb09b-bffe-458b-8960-799687a4d8d7",
+      "session_id": "ragas-e2e-d4f42769-9e77-48cd-9b5a-3a529be54cc7",
       "query": "『나이가 든다는 착각』에서 저자는 노화의 체념적 수용과 가속화가 무엇을 의미하는가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 32.006508111953735
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 21.35702896118164
     },
     {
       "index": 62,
-      "session_id": "ragas-e2e-8da2a955-ff2c-4ecc-a350-7c7f5cd8dc8a",
+      "session_id": "ragas-e2e-beeae5dc-cc20-449a-9588-1232b664fa08",
       "query": "『나이가 든다는 착각』에서 저자가 노화에 대한 연구에 발을 딛게 된 계기는 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -816,12 +836,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.056878089904785
+      "context_count": 3,
+      "elapsed_time": 19.38164782524109
     },
     {
       "index": 63,
-      "session_id": "ragas-e2e-095df3d3-8e01-4c07-81aa-03d424926bb1",
+      "session_id": "ragas-e2e-39a11f05-ef4c-4a47-909a-cdbdf4b65397",
       "query": "레비의 오하이오 종단연구에 따르면, 긍정적 연령인식을 가진 사람이 반대 경우보다 평균 몇 년 더 장수하는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -829,12 +849,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.652743816375732
+      "context_count": 3,
+      "elapsed_time": 20.419055938720703
     },
     {
       "index": 64,
-      "session_id": "ragas-e2e-f10a15c0-abf1-4337-9bbf-c03e0743aeec",
+      "session_id": "ragas-e2e-9788d2aa-926e-4c6f-99b8-7b24ec9d0a37",
       "query": "책에서 저자는 연령인식이 사회적으로 구조화될 때 발생하는 문제점을 어떻게 설명하고 있는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -843,63 +863,13 @@
         1
       ],
       "evidence_doc_count": 2,
-      "context_count": 2,
-      "elapsed_time": 20.054930925369263
+      "context_count": 3,
+      "elapsed_time": 24.53603219985962
     },
     {
       "index": 65,
-      "session_id": "ragas-e2e-678c576f-1eca-4266-99ce-83cc56adf4a3",
+      "session_id": "ragas-e2e-b257ff74-3490-403e-9cff-47f1e1c4e3de",
       "query": "『구글 임원에서 실리콘밸리 알바생이 되었습니다』의 저자가 실리콘밸리에서 수행한 육체노동의 주된 목적은 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 29.511701107025146
-    },
-    {
-      "index": 66,
-      "session_id": "ragas-e2e-981bb078-8d96-4577-bc89-feb00f14fdea",
-      "query": "'회사가 먼저 손을 놓아줘'라는 구절이 나타난 상황에 대한 저자의 마음가짐은 어떠했습니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": false,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.97914409637451
-    },
-    {
-      "index": 67,
-      "session_id": "ragas-e2e-477154b7-2105-45ac-90c1-50ef51b4bcf0",
-      "query": "『인공지능은 무엇이 되려 하는가』에서 저자는 갭이어를 통해 어떤 경험을 얻었는가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 27.821849822998047
-    },
-    {
-      "index": 68,
-      "session_id": "ragas-e2e-478574d9-d468-4c60-a855-eee1b6a2a79d",
-      "query": "『인공지능은 무엇이 되려 하는가』에서 스타벅스의 시간제 근무 시스템이 저자에게 인상적이었던 이유는 무엇인가?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 25.619534254074097
-    },
-    {
-      "index": 69,
-      "session_id": "ragas-e2e-21983d10-0110-490b-8fb9-90b350bc96ef",
-      "query": "『인공지능은 무엇이 되려 하는가』에서 노버트 위너의 사이버네틱스가 어떤 문제점을 제기하는지 설명하시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -908,11 +878,65 @@
       ],
       "evidence_doc_count": 2,
       "context_count": 2,
-      "elapsed_time": 21.89986777305603
+      "elapsed_time": 18.92213010787964
+    },
+    {
+      "index": 66,
+      "session_id": "ragas-e2e-95dbc421-d889-4b17-ba34-1a1fe84ac288",
+      "query": "'회사가 먼저 손을 놓아줘'라는 구절이 나타난 상황에 대한 저자의 마음가짐은 어떠했습니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 17.00575017929077
+    },
+    {
+      "index": 67,
+      "session_id": "ragas-e2e-714d3200-3895-4bcb-8190-2878b295b14f",
+      "query": "『인공지능은 무엇이 되려 하는가』에서 저자는 갭이어를 통해 어떤 경험을 얻었는가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 1,
+      "elapsed_time": 14.188760995864868
+    },
+    {
+      "index": 68,
+      "session_id": "ragas-e2e-ea9682e8-917e-4450-a117-2b809dfcb229",
+      "query": "『인공지능은 무엇이 되려 하는가』에서 스타벅스의 시간제 근무 시스템이 저자에게 인상적이었던 이유는 무엇인가?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 1,
+      "elapsed_time": 17.151115894317627
+    },
+    {
+      "index": 69,
+      "session_id": "ragas-e2e-00fc6154-d2c3-45a1-8240-4cf223d62db0",
+      "query": "『인공지능은 무엇이 되려 하는가』에서 노버트 위너의 사이버네틱스가 어떤 문제점을 제기하는지 설명하시오.",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1,
+        2
+      ],
+      "evidence_doc_count": 3,
+      "context_count": 3,
+      "elapsed_time": 22.615592002868652
     },
     {
       "index": 70,
-      "session_id": "ragas-e2e-f355ab6f-6de1-4c60-8857-c38b80deaf40",
+      "session_id": "ragas-e2e-0079292a-95b5-4214-913f-bf7447b1f12a",
       "query": "존 매커시가 ‘사이버네틱스’라는 용어를 싫어한 이유는 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -920,49 +944,53 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.51844811439514
+      "context_count": 2,
+      "elapsed_time": 35.50138306617737
     },
     {
       "index": 71,
-      "session_id": "ragas-e2e-b18e722a-1d17-4cf8-987b-d655524262c3",
+      "session_id": "ragas-e2e-db15d3ee-0cf3-46d1-a6a6-3a61e364ff65",
       "query": "알프레드 존스가 정립한 헤지 펀드 투자 초기의 공식에서 레버리지를 사용하는 이유는 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 31.141975164413452
-    },
-    {
-      "index": 72,
-      "session_id": "ragas-e2e-7113567c-7d60-4a60-b9b6-8abab295ca60",
-      "query": "소로스가 제시한 ‘재귀성 reflexivity’ 개념이 투자 전략에 미치는 영향에 대해 설명하십시오.",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 26.637604236602783
+    },
+    {
+      "index": 72,
+      "session_id": "ragas-e2e-a8a6bea1-656e-441a-b66c-ef2dc5ddcb84",
+      "query": "소로스가 제시한 ‘재귀성 reflexivity’ 개념이 투자 전략에 미치는 영향에 대해 설명하십시오.",
+      "hypothetical_doc": "",
+      "web_search_triggered": true,
+      "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 19.696370124816895
+      "elapsed_time": 25.98140597343445
     },
     {
       "index": 73,
-      "session_id": "ragas-e2e-10ae29b8-ce11-471f-afa4-d499a7c8201f",
+      "session_id": "ragas-e2e-0df5a500-ddf7-4943-adc8-7cf599288337",
       "query": "John Brockman의 책 ‘위너가 옳아 우린 망할거야 vs 위너 예측은 틀릴거임’에서, 저자가 책을 읽고 줄을 세워본 결과 어떤 경향을 보였는가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 34.107998847961426
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0,
+        1
+      ],
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 22.326690912246704
     },
     {
       "index": 74,
-      "session_id": "ragas-e2e-87ce479f-970c-41e3-85ae-418b46ce4e50",
+      "session_id": "ragas-e2e-5cd04f2e-7cd7-4b05-b6be-e8a80d70e411",
       "query": "책에서 언급된 핑커의 주장에 따르면, 인공지능 기술 발전에 대한 과대망상은 무엇을 제한하는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -970,12 +998,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.02099585533142
+      "context_count": 2,
+      "elapsed_time": 17.483933925628662
     },
     {
       "index": 75,
-      "session_id": "ragas-e2e-c3819dd2-eb7a-4901-a410-b40e82c33ee2",
+      "session_id": "ragas-e2e-d15679f7-d755-441f-bc73-aab26a08692a",
       "query": "위너가 주장하는 AGI의 가장 큰 위험은 무엇이며, 그 위험이 소련의 반체제 운동과 어떤 유사점을 가지고 있습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -984,12 +1012,12 @@
         1
       ],
       "evidence_doc_count": 2,
-      "context_count": 2,
-      "elapsed_time": 22.550171852111816
+      "context_count": 3,
+      "elapsed_time": 21.218745708465576
     },
     {
       "index": 76,
-      "session_id": "ragas-e2e-be6b49d6-cf14-4d70-b800-13b8dcf3e0ee",
+      "session_id": "ragas-e2e-f6bc9042-9a1b-40b2-aa01-a1f3e69a56e1",
       "query": "‘종이 클립 이슈’가 가치정렬(value alignment) 문제에서 어떤 의미를 가지며, 도이치가 제시한 AGI의 진정한 모습은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -998,11 +1026,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 24.75273299217224
+      "elapsed_time": 15.908971071243286
     },
     {
       "index": 77,
-      "session_id": "ragas-e2e-9edcd869-9a92-417b-9408-de59721bd2f9",
+      "session_id": "ragas-e2e-5ee00a54-fd1f-497f-abff-9570ffca675a",
       "query": "브록만 엣지 시리즈의 주요 특징은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1011,11 +1039,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 18.06106185913086
+      "elapsed_time": 15.953261613845825
     },
     {
       "index": 78,
-      "session_id": "ragas-e2e-205e0e55-96f4-48b1-8b36-3841b1ca547a",
+      "session_id": "ragas-e2e-767d08f9-96ff-4c41-9f68-8676083e7260",
       "query": "브록만 엣지 시리즈가 오래된 책임에도 불구하고 흥미로운 점은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1023,12 +1051,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.2170090675354
+      "context_count": 2,
+      "elapsed_time": 18.738932847976685
     },
     {
       "index": 79,
-      "session_id": "ragas-e2e-eb71d847-c365-484d-9d29-f239778b17f7",
+      "session_id": "ragas-e2e-443e9fe6-8ca2-4605-a1c0-204d3ac1d48d",
       "query": "‘급팽창 이론’이 빅뱅 이론을 수정해야 한다는 주된 이유는 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1036,25 +1064,26 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.83726692199707
+      "context_count": 3,
+      "elapsed_time": 21.191890954971313
     },
     {
       "index": 80,
-      "session_id": "ragas-e2e-0cfaa0ed-371b-4898-8cec-0bf93b2285e4",
+      "session_id": "ragas-e2e-ddfa3f47-0dc5-4cce-9143-55323601f80c",
       "query": "그레이엄 하먼 저자의 책 ‘Immaterialism: Objects & Social theory’에서 ANT(행위자 네트워크 이론)를 접하게 된 계기는 무엇입니까?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 22.729276180267334
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 20.03499412536621
     },
     {
       "index": 81,
-      "session_id": "ragas-e2e-0172ab8a-acc3-4011-a4a8-dfb0be467eab",
+      "session_id": "ragas-e2e-304a653a-1955-406e-90e9-9b0dec930ff3",
       "query": "하먼이 ANT의 약점을 파고들면서 강조하고자 했던 행위자(actor)의 특징은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1062,88 +1091,94 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 2,
-      "elapsed_time": 21.788300037384033
+      "context_count": 3,
+      "elapsed_time": 22.058576822280884
     },
     {
       "index": 82,
-      "session_id": "ragas-e2e-c9c7c08d-4c5d-4878-9845-6a09b5063204",
+      "session_id": "ragas-e2e-96f72218-f7da-492d-a0b5-b073cfc7e3ae",
       "query": "하먼이 린 마굴리스의 SET(Sreial Endosymbiosis Theory)를 채용하게 된 이유는 무엇입니까?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 19.915103912353516
-    },
-    {
-      "index": 83,
-      "session_id": "ragas-e2e-442d69e2-e3c7-4ff1-965a-358c3d221be8",
-      "query": "GW 라이프니츠와 앙투안 아르노의 서신에서 라이프니츠가 VOC에 대해 비꼬는 이유는 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 27.55813694000244
+      "elapsed_time": 15.108305931091309
+    },
+    {
+      "index": 83,
+      "session_id": "ragas-e2e-644e1fb4-aad8-4998-a440-451ff1796f6a",
+      "query": "GW 라이프니츠와 앙투안 아르노의 서신에서 라이프니츠가 VOC에 대해 비꼬는 이유는 무엇입니까?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 19.0866060256958
     },
     {
       "index": 84,
-      "session_id": "ragas-e2e-4800c3ea-da44-455e-a0ef-5b08951a2116",
+      "session_id": "ragas-e2e-a7821645-ff02-406e-889f-bbf201ae6f53",
       "query": "『문장의 맛』에서 이신주 작가는 어떤 방식으로 글감을 찾는지 설명하고 있습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 20.08417510986328
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 19.71272921562195
     },
     {
       "index": 85,
-      "session_id": "ragas-e2e-54e05c95-e8a3-4d6f-be7a-ae7553c2ef5b",
+      "session_id": "ragas-e2e-a768e34b-763e-4724-b3c0-500a40e8f394",
       "query": "‘문장의 맛’ 책에서 저자는 어떤 언어적 특징을 다루며, 그 특징을 설명하기 위해 어떤 방법을 사용했는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.611171007156372
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 17.328279733657837
     },
     {
       "index": 86,
-      "session_id": "ragas-e2e-7a847ccc-9986-4596-966a-95b4c4599728",
+      "session_id": "ragas-e2e-4b7be746-165e-4cb1-8f8e-6f96d6ebe450",
       "query": "‘문장의 맛’ 책에서 그리스 로마의 수사학은 어떤 범위를 포함하고 있으며, 해당 책은 그 범위 중 무엇에 국한되어 정리되었는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 16.716020107269287
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 19.17180061340332
     },
     {
       "index": 87,
-      "session_id": "ragas-e2e-1c608b14-1d98-41eb-bbe0-01ea64def88b",
+      "session_id": "ragas-e2e-f696a56f-b150-4e63-b0fd-0f8d1920e108",
       "query": "Mark Forsyth의 『Mark Forsyth, 2013』에서 영어 수사학의 종류를 세 가지로 분류했을 때, 영단어나 문법을 활용한 수사학은 몇 가지인가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 29.101847887039185
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 21.57479500770569
     },
     {
       "index": 88,
-      "session_id": "ragas-e2e-c068dd4e-ea21-4326-85e2-c9c563d98c26",
+      "session_id": "ragas-e2e-e821d970-23b5-488d-8537-c71a114a3a18",
       "query": "책 제목 ‘여행자 수표 기억나시나요?’에서 언급된 여행자 수표의 과거 사용 목적은 무엇이었나요?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1151,25 +1186,25 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.98710298538208
+      "context_count": 2,
+      "elapsed_time": 15.39535903930664
     },
     {
       "index": 89,
-      "session_id": "ragas-e2e-b6060487-8e8d-43c8-a9aa-48eb4526d8a2",
+      "session_id": "ragas-e2e-324a08b2-b0d7-4ddc-b28e-fe667c2734ea",
       "query": "책에서 ‘잊혀질 권리’라는 부류로 분류된 내용과 디지털 시대의 변화를 비교 설명하시오.",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 29.245731830596924
+      "context_count": 3,
+      "elapsed_time": 16.923714876174927
     },
     {
       "index": 90,
-      "session_id": "ragas-e2e-16f5f8c0-f54f-40d0-ae81-395f31c5715c",
+      "session_id": "ragas-e2e-ff02c286-3291-40fd-8549-9af23ac63be3",
       "query": "‘유실물’이라는 제목의 책이 강조하는 핵심 교훈은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1177,12 +1212,12 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 17.638652801513672
+      "context_count": 2,
+      "elapsed_time": 12.901271104812622
     },
     {
       "index": 91,
-      "session_id": "ragas-e2e-1b3c6bcd-4f98-4a25-96fb-5013d18f2b48",
+      "session_id": "ragas-e2e-3d06e597-bd09-4bd6-a24d-9f3286e9109d",
       "query": "텍스트에 제시된 ‘현재에 존재하기(being in the moment)’의 중요성은 무엇입니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
@@ -1190,25 +1225,27 @@
         0
       ],
       "evidence_doc_count": 1,
-      "context_count": 2,
-      "elapsed_time": 22.869752883911133
+      "context_count": 3,
+      "elapsed_time": 15.894919872283936
     },
     {
       "index": 92,
-      "session_id": "ragas-e2e-5a508da2-3eae-414e-88c7-4cb5cff1c5fb",
+      "session_id": "ragas-e2e-6b252038-5a84-4627-a6e4-fe84ca7646f8",
       "query": "‘모티페이션 핏(motivational fit)’ 개념이 2025년 채용 트렌드 책에서 제시하는 내용 중 어떤 점을 주로 설명하는가?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1,
+        2
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 18.518071174621582
+      "evidence_doc_count": 3,
+      "context_count": 3,
+      "elapsed_time": 17.328490018844604
     },
     {
       "index": 93,
-      "session_id": "ragas-e2e-5fbae069-518e-4ae2-b507-04d7c8d0d1a2",
+      "session_id": "ragas-e2e-521dadf0-02a8-42c3-a2cc-7d7116f7b9c9",
       "query": "윤영돈 저자가 매년 채용 트렌드 책을 발간해 온 이유에 대한 책의 설명은 무엇인가?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1217,75 +1254,53 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 29.7661030292511
+      "elapsed_time": 20.468056201934814
     },
     {
       "index": 94,
-      "session_id": "ragas-e2e-876daab2-1b12-4650-91bf-ee4f62f99057",
+      "session_id": "ragas-e2e-ceca4baa-60ca-40b2-a12c-73dad139d2e6",
       "query": "『관찰력 기르는 법』에서 차페크의 글은 어떤 특징을 가지고 있나요?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 29.055797815322876
+      "evidence_doc_count": 2,
+      "context_count": 2,
+      "elapsed_time": 18.555259943008423
     },
     {
       "index": 95,
-      "session_id": "ragas-e2e-26a0d0ff-2ee5-466a-858e-83ed2ca68090",
+      "session_id": "ragas-e2e-b23a8c12-7f1a-4a75-b64a-cf5d1487a3f9",
       "query": "사도시마 요헤이가 이 책에서 어떤 역할을 수행하고 있습니까?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        1
       ],
       "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 27.835105895996094
+      "context_count": 3,
+      "elapsed_time": 20.253433227539062
     },
     {
       "index": 96,
-      "session_id": "ragas-e2e-795e1f37-3609-4a54-8fcc-69286dc4826e",
+      "session_id": "ragas-e2e-c4ddd75f-8217-4122-86f7-75a4b512d6f1",
       "query": "'각성'이라는 표현이 이 책에서 어떤 의미로 사용되었습니까?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        1
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 19.25796365737915
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 21.8125479221344
     },
     {
       "index": 97,
-      "session_id": "ragas-e2e-00a06a44-d4f2-4298-b678-e132f8cc9f28",
+      "session_id": "ragas-e2e-1a7d7581-aaa7-422c-ade6-d77e4f92221a",
       "query": "『안경』에서 저자가 후쿠오카로 이사하여 도쿄를 오가는 삶을 살았던 행동 이유는 무엇입니까?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 27.1508629322052
-    },
-    {
-      "index": 98,
-      "session_id": "ragas-e2e-d4d16fb5-d196-40dc-ab1e-940377630585",
-      "query": "책 ‘단 한 사람’의 저자가 10년 동안 다루었던 주제의 무게에 대해 어떤 점을 언급하고 있나요?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 22.426000118255615
-    },
-    {
-      "index": 99,
-      "session_id": "ragas-e2e-9ad06cda-5430-408e-963d-a4e25c61d005",
-      "query": "'단 한 사람' 소설의 줄거리에 대해 독자들이 어떤 어려움을 겪을 수 있나요?",
       "hypothetical_doc": "",
       "web_search_triggered": false,
       "evidence_indices": [
@@ -1293,11 +1308,35 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 18.523886919021606
+      "elapsed_time": 16.591495275497437
+    },
+    {
+      "index": 98,
+      "session_id": "ragas-e2e-a242f6ac-863a-4e7b-b0a1-856643aa8a82",
+      "query": "책 ‘단 한 사람’의 저자가 10년 동안 다루었던 주제의 무게에 대해 어떤 점을 언급하고 있나요?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 16.51496696472168
+    },
+    {
+      "index": 99,
+      "session_id": "ragas-e2e-2e6e3e21-d7ce-4d09-b992-afd1b7501922",
+      "query": "'단 한 사람' 소설의 줄거리에 대해 독자들이 어떤 어려움을 겪을 수 있나요?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
+      "context_count": 3,
+      "elapsed_time": 22.102174997329712
     },
     {
       "index": 100,
-      "session_id": "ragas-e2e-0bb40971-1dc9-4c54-bd3e-83f2c941d629",
+      "session_id": "ragas-e2e-a8070476-cefa-401a-a2b3-9bc4f60ccdc5",
       "query": "지류상품권으로 메가박스 홈페이지 영화 예매를 하기 위한 교환 방법",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1306,11 +1345,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 22.50650715827942
+      "elapsed_time": 22.22684907913208
     },
     {
       "index": 101,
-      "session_id": "ragas-e2e-5085bad3-486f-4219-98b1-45304f0cbeb3",
+      "session_id": "ragas-e2e-a511f6a3-52a2-445a-a5b7-8d8078c3e078",
       "query": "슈파이어 대성당 2차 축조시 가장 우선순위로 고려했던 천장 건축 방식",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1319,24 +1358,22 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 28.48793601989746
+      "elapsed_time": 28.14637303352356
     },
     {
       "index": 102,
-      "session_id": "ragas-e2e-e607f082-c1d4-402e-880a-479b5ad385ba",
+      "session_id": "ragas-e2e-ab05b774-9416-4287-88f8-629ce9d8db6f",
       "query": "DVD 대여시장의 포화상태'라는 일반화를 해결한 자가 세운 회사는?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 26.844501972198486
+      "elapsed_time": 12.426799774169922
     },
     {
       "index": 103,
-      "session_id": "ragas-e2e-e8d4ab22-8ab2-4ef2-a748-2e4c7bca369a",
+      "session_id": "ragas-e2e-f3005aa3-a4e1-4757-9e0c-d01679142b32",
       "query": "집단 극화 현상은 주로 어떤 상황에서 흔히 일어날 수 있나요?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1345,33 +1382,35 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 28.393540859222412
+      "elapsed_time": 23.894920110702515
     },
     {
       "index": 104,
-      "session_id": "ragas-e2e-babc5e34-c644-40b8-b6ce-8928404b8a60",
+      "session_id": "ragas-e2e-19622a07-0c9b-428c-8401-d8608a3b7e05",
       "query": "헬기의 말을 듣고 시그룬에게 무덤에 가 헬기를 만나라 한 인물은?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 20.335870027542114
+      "elapsed_time": 21.089522123336792
     },
     {
       "index": 105,
-      "session_id": "ragas-e2e-d3dd0819-1502-4e9e-b284-1dbd9197b7e2",
+      "session_id": "ragas-e2e-d95eff97-a997-404e-ba70-d1e07ae668d7",
       "query": "하워드 마셜의 재산 상속을 위해 안나 니콜 스미스가 법정 소송을 벌인 기간",
       "hypothetical_doc": "",
       "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 27.376466751098633
+      "elapsed_time": 21.866235733032227
     },
     {
       "index": 106,
-      "session_id": "ragas-e2e-31d07b12-bdac-4c68-b8ae-9129d4e63c65",
+      "session_id": "ragas-e2e-8c20d56a-ce92-4ca1-a01c-16253124b869",
       "query": "페라타 제6군단은 기원전 41년에 누구와 동방에 있었나요?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1380,24 +1419,22 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 31.03304696083069
+      "elapsed_time": 24.061075925827026
     },
     {
       "index": 107,
-      "session_id": "ragas-e2e-757690dd-22a6-424c-b013-bd64540f13c0",
+      "session_id": "ragas-e2e-c0d0c434-b3b9-4a34-b144-66a343abff12",
       "query": "기욤 뮈소가 집필하는 소설의 장르는?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 26.403356790542603
+      "elapsed_time": 12.808086156845093
     },
     {
       "index": 108,
-      "session_id": "ragas-e2e-7add691d-2939-4cc2-bf75-789f0e15787b",
+      "session_id": "ragas-e2e-78921366-d27c-4326-9042-4644f728af8e",
       "query": "고구려와 당나라의 전쟁에서 주요 전투는 무엇이었나요?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1406,24 +1443,22 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 28.25584101676941
+      "elapsed_time": 27.546865940093994
     },
     {
       "index": 109,
-      "session_id": "ragas-e2e-032249cd-b116-4df7-9758-72f59ea86c5f",
+      "session_id": "ragas-e2e-af334d36-ce60-4586-a4bc-3a03fc13bb6d",
       "query": "기존 전차에 장착시키면 원형의 전차의 화력과 대등한 장비",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 27.216902017593384
+      "elapsed_time": 12.631206035614014
     },
     {
       "index": 110,
-      "session_id": "ragas-e2e-2fad04c3-8ed8-4aae-900e-b46efe201cee",
+      "session_id": "ragas-e2e-957e7131-4b72-416b-ab5f-5ec1298e26e8",
       "query": "예수가 하나님을 아버지라고 부른 것은 무엇으로 인해 잉태되었기 때문인가?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1432,11 +1467,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 31.101356029510498
+      "elapsed_time": 26.30409288406372
     },
     {
       "index": 111,
-      "session_id": "ragas-e2e-eb6da389-3164-4b81-ba57-36b73f9b3a9d",
+      "session_id": "ragas-e2e-f0b63b1e-1cb3-4250-b020-b1e0441ba406",
       "query": "첼로와 함께 발전 조짐 이후 번갈아 연주하는 악기는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1445,11 +1480,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 27.131797790527344
+      "elapsed_time": 24.931267261505127
     },
     {
       "index": 112,
-      "session_id": "ragas-e2e-c8e04a4e-8cfd-463b-9f19-ae6e5123a1a0",
+      "session_id": "ragas-e2e-4218cf18-1737-4e61-8c74-43e1334be83c",
       "query": "멕시코 연방 정부는 메탈클래드에게 얼마를 보상하라고 하였나?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1458,37 +1493,36 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 32.01296925544739
+      "elapsed_time": 22.636664152145386
     },
     {
       "index": 113,
-      "session_id": "ragas-e2e-d2059c3b-30f0-4c6d-a3a1-7684634ddbe9",
+      "session_id": "ragas-e2e-4fdcf36e-d635-476a-bc9a-f2d6bc037766",
       "query": "긍정적인 생각을 부정적인 생각보다 선호하는 경향을 나타내는 용어는?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [
-        0
+        0,
+        2
       ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 27.736966848373413
+      "evidence_doc_count": 2,
+      "context_count": 3,
+      "elapsed_time": 21.851973056793213
     },
     {
       "index": 114,
-      "session_id": "ragas-e2e-95e8f9fe-4ed4-4fd5-a669-569ab05dd169",
+      "session_id": "ragas-e2e-298c7da3-b766-46c7-92ea-ba0c830a970e",
       "query": "다중 계정 사용자의 판별을 불가능하게 하는 것은?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 25.268637895584106
+      "elapsed_time": 12.115877866744995
     },
     {
       "index": 115,
-      "session_id": "ragas-e2e-8885a4ce-1b62-4137-8246-70ed29af1076",
+      "session_id": "ragas-e2e-78b652c3-3f85-46a1-893f-ed8bea92a5fc",
       "query": "밴드에게 창작적으로 제약을 준 인물은?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1497,35 +1531,33 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 22.573853015899658
+      "elapsed_time": 17.84000587463379
     },
     {
       "index": 116,
-      "session_id": "ragas-e2e-f2a592e4-2b84-41c1-a229-7c5db1e71725",
+      "session_id": "ragas-e2e-026d083a-541d-4ddf-9e75-6e60cbe7a102",
       "query": "항우가 진나라를 멸하면서 조왕 헐은 어디로 이동했는가?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 25.216602087020874
+      "elapsed_time": 21.521155834197998
     },
     {
       "index": 117,
-      "session_id": "ragas-e2e-bc0ca7a8-f01c-4c96-bd9e-4e2b5d347be3",
+      "session_id": "ragas-e2e-45933aae-3b5a-45c5-af93-7d76421e28aa",
       "query": "티칼의 무덤 양식과 부장품의 특징을 알려주세요.",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 32.99823498725891
+      "elapsed_time": 10.084325075149536
     },
     {
       "index": 118,
-      "session_id": "ragas-e2e-905a89d1-ddd4-4987-bf14-41aadc79a9d3",
+      "session_id": "ragas-e2e-4c4d495d-73cc-41fc-8043-ac231fef23a1",
       "query": "가끔씩 북동부 지역에 살고있는 오리너구리들을 사냥하는 포식자는 누구인가?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1534,59 +1566,57 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 34.033162117004395
+      "elapsed_time": 24.90201711654663
     },
     {
       "index": 119,
-      "session_id": "ragas-e2e-69b6a886-8782-4edf-b9ad-6c39b29b6407",
+      "session_id": "ragas-e2e-25099803-f786-44d4-94ad-f8a0ada64f4e",
       "query": "알렉산드로스 대왕은 고대 근동을 언제 점령했는가?",
       "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 27.478812217712402
-    },
-    {
-      "index": 120,
-      "session_id": "ragas-e2e-97b51e8f-58e0-4a28-acce-02831475e6d9",
-      "query": "크레시 전투에서 대승을 거둔 군대는 누가 지휘했나요?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [
-        0
-      ],
-      "evidence_doc_count": 1,
-      "context_count": 1,
-      "elapsed_time": 29.74875807762146
-    },
-    {
-      "index": 121,
-      "session_id": "ragas-e2e-a55ec009-b5a7-48f7-a999-a9c1217114aa",
-      "query": "개 홍역 바이러스가 그늘진 곳보다 더 오래 생존 가능한 곳은?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
+      "web_search_triggered": false,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 24.411911964416504
+      "elapsed_time": 13.45703387260437
+    },
+    {
+      "index": 120,
+      "session_id": "ragas-e2e-783f0709-9bb1-465e-88b9-233caed39dfa",
+      "query": "크레시 전투에서 대승을 거둔 군대는 누가 지휘했나요?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
+      "context_count": 1,
+      "elapsed_time": 12.377439975738525
+    },
+    {
+      "index": 121,
+      "session_id": "ragas-e2e-7032e154-6d8f-491d-9cf7-c8f15b9fccb4",
+      "query": "개 홍역 바이러스가 그늘진 곳보다 더 오래 생존 가능한 곳은?",
+      "hypothetical_doc": "",
+      "web_search_triggered": true,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 1,
+      "elapsed_time": 25.793418884277344
     },
     {
       "index": 122,
-      "session_id": "ragas-e2e-7d1fc480-5bb6-41be-8a61-92a22be6ad3e",
+      "session_id": "ragas-e2e-c0fd5bb9-9ad8-4978-8e60-b43a663fd754",
       "query": "하나은행의 요구에도 김정태 회장 사진에서 변하지 않은 것은?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 26.593506813049316
+      "elapsed_time": 23.3060941696167
     },
     {
       "index": 123,
-      "session_id": "ragas-e2e-67292cf3-af2e-4a77-9353-7737f72a0556",
+      "session_id": "ragas-e2e-60d2f439-e364-486d-b80b-4f3710bda19d",
       "query": "벤처 창업의 성공 모델과 알리바바의 성공 스토리를 비교해줘.",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1595,11 +1625,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 32.87805891036987
+      "elapsed_time": 26.73381805419922
     },
     {
       "index": 124,
-      "session_id": "ragas-e2e-2842eeef-2519-4b39-b0ee-23e0bdefb610",
+      "session_id": "ragas-e2e-358a6a91-3f33-4c8d-a0d5-a89d2338db76",
       "query": "고투 어반 정릉점 이전에 온핏을 활용한 곳",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1608,12 +1638,25 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 26.226413011550903
+      "elapsed_time": 22.571192979812622
     },
     {
       "index": 125,
-      "session_id": "ragas-e2e-55bce040-c694-43fe-a0e2-2feb518ee8d7",
+      "session_id": "ragas-e2e-590fa238-590c-4c8a-8a72-263a1e3ea590",
       "query": "뇌에 탈피 신호를 보내는 부위는?",
+      "hypothetical_doc": "",
+      "web_search_triggered": false,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
+      "context_count": 2,
+      "elapsed_time": 15.755032062530518
+    },
+    {
+      "index": 126,
+      "session_id": "ragas-e2e-01782718-1fba-4531-8c2c-af87140dcad7",
+      "query": "지상파 드라마 관련 조사를 통해 인사이트를 추출한 연구원 수는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [
@@ -1621,22 +1664,11 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 26.269102811813354
-    },
-    {
-      "index": 126,
-      "session_id": "ragas-e2e-6e9910b6-8491-432d-8a5f-c49a8a27cb04",
-      "query": "지상파 드라마 관련 조사를 통해 인사이트를 추출한 연구원 수는?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 27.04424214363098
+      "elapsed_time": 18.67441201210022
     },
     {
       "index": 127,
-      "session_id": "ragas-e2e-11116869-7482-4429-8bca-b7c6ae15f18f",
+      "session_id": "ragas-e2e-baa0f1fa-34bf-4c98-8923-ec8cd64661b6",
       "query": "손상 된 후 재생 가능한 거위와 오리의 신체 부위는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1645,22 +1677,24 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 30.56896209716797
+      "elapsed_time": 18.29152822494507
     },
     {
       "index": 128,
-      "session_id": "ragas-e2e-1c073ade-9f48-4ac6-94c1-8737701c3c79",
+      "session_id": "ragas-e2e-554eabf5-a096-47fe-a9d5-ed1676b5b9b3",
       "query": "삼탄당 인산 이성질화효소 결핍증은 주로 어떤 물질의 돌연변이로 일어나나요?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 22.957900047302246
+      "elapsed_time": 24.207297801971436
     },
     {
       "index": 129,
-      "session_id": "ragas-e2e-2c9b7803-dbf2-4475-93e8-6805ddbc52da",
+      "session_id": "ragas-e2e-45ea7a5f-d6bb-417e-bcf5-9ab707ad475a",
       "query": "미국에서 나폴리식 요리를 의미하는 요리는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1669,44 +1703,48 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 24.431127071380615
+      "elapsed_time": 15.933777809143066
     },
     {
       "index": 130,
-      "session_id": "ragas-e2e-774dfb21-fb8f-4aca-b2b8-65a434c0f857",
+      "session_id": "ragas-e2e-722ca10d-7951-45ab-9db3-317fd1ccf1dc",
       "query": "오리너구리가 전기를 가장 잘 느끼는 부위는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 28.061995029449463
+      "elapsed_time": 17.23004174232483
     },
     {
       "index": 131,
-      "session_id": "ragas-e2e-049f1cdd-3635-4c5e-8577-2824f0521290",
+      "session_id": "ragas-e2e-836e8f2b-739e-40e6-afdd-9dd6073d454e",
       "query": "강수진 단장을 처음보자마자 사랑에 빠진 남편의 팔 부위에 써진 문구는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [],
       "evidence_doc_count": 0,
       "context_count": 1,
-      "elapsed_time": 26.010308980941772
+      "elapsed_time": 18.84332299232483
     },
     {
       "index": 132,
-      "session_id": "ragas-e2e-fdb9cc23-ab5f-4392-a501-9dcac310bbb3",
+      "session_id": "ragas-e2e-c9026b1b-4ead-4149-9897-fded33e36a58",
       "query": "홍콩에서 영어학과 학위가 없는 교사들은 무엇을 통과해야 하는가?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 25.14366602897644
+      "elapsed_time": 20.3843252658844
     },
     {
       "index": 133,
-      "session_id": "ragas-e2e-48a6933a-8d9e-4db6-9212-ef49111f0f8b",
+      "session_id": "ragas-e2e-014e412a-a2f5-438d-83d0-74e30904f016",
       "query": "무굴 제국의 전성기를 이끌었으나 동시에 라지프트 제후의 지지를 잃은 사람은?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1715,22 +1753,24 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 23.327460050582886
+      "elapsed_time": 19.125975131988525
     },
     {
       "index": 134,
-      "session_id": "ragas-e2e-80a7dd2f-3f9e-4b37-ae75-753e20de258e",
+      "session_id": "ragas-e2e-d057d099-4040-4549-b7eb-bce242b962a9",
       "query": "공성훈 작가는<낚시>와 <담배 피우는 남자(폭포)>에서 공통적으로 자연과 누구를 비교하는가?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
+      "evidence_indices": [
+        0
+      ],
+      "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 20.564708948135376
+      "elapsed_time": 22.951550245285034
     },
     {
       "index": 135,
-      "session_id": "ragas-e2e-61690b0d-1a3d-40ec-8ecd-4a2d8500efad",
+      "session_id": "ragas-e2e-6660ce42-e65e-48e3-8e47-bbc1b1a404a1",
       "query": "효율적인 운영을 도와주는 열차선 배치 방법",
       "hypothetical_doc": "",
       "web_search_triggered": true,
@@ -1739,12 +1779,23 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 27.430108785629272
+      "elapsed_time": 25.588685989379883
     },
     {
       "index": 136,
-      "session_id": "ragas-e2e-73f743ac-07c2-48b7-919a-ba4668e396b1",
+      "session_id": "ragas-e2e-8bfdfe9a-c3a8-4871-85cb-871e3029180f",
       "query": "안드레우치오 디 피에트로를 몰래 지켜보던 인물은 어떤 지역 출신인가요?",
+      "hypothetical_doc": "",
+      "web_search_triggered": true,
+      "evidence_indices": [],
+      "evidence_doc_count": 0,
+      "context_count": 1,
+      "elapsed_time": 19.487680196762085
+    },
+    {
+      "index": 137,
+      "session_id": "ragas-e2e-e3a78d4f-396c-4c2b-8a3f-80ab30d119cc",
+      "query": "젠서 관계자에 따르면 젠서의 해외사업에 지장을 준 요소는?",
       "hypothetical_doc": "",
       "web_search_triggered": true,
       "evidence_indices": [
@@ -1752,18 +1803,7 @@
       ],
       "evidence_doc_count": 1,
       "context_count": 1,
-      "elapsed_time": 26.430888891220093
-    },
-    {
-      "index": 137,
-      "session_id": "ragas-e2e-ae38b8c7-a018-45ed-9a0a-ceb6b4779afe",
-      "query": "젠서 관계자에 따르면 젠서의 해외사업에 지장을 준 요소는?",
-      "hypothetical_doc": "",
-      "web_search_triggered": true,
-      "evidence_indices": [],
-      "evidence_doc_count": 0,
-      "context_count": 1,
-      "elapsed_time": 19.728507041931152
+      "elapsed_time": 17.662354230880737
     }
   ]
 }
