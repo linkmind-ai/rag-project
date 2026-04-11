@@ -372,15 +372,27 @@ class RAGGraph:
 
         async def grade_doc(doc: Document):
             input_data = {"document": doc.content, "query": query}
-            score = await asyncio.to_thread(self._document_grader.invoke, input_data)
-            return doc, score
+            try:
+                score = await asyncio.to_thread(
+                    self._document_grader.invoke, input_data
+                )
+                relevance = score.relevance
+
+            except Exception:
+                output = str(
+                    await asyncio.to_thread(self._document_grader.invoke, input_data)
+                )
+                match = re.search(r"\d\.\d+", output)
+                relevance = float(match.group()) if match else 0.0
+
+            return doc, relevance
 
         # 병렬 grading 실행
         tasks = [grade_doc(doc) for doc in retrieved_docs]
         results = await asyncio.gather(*tasks)
 
         # 관련 문서 필터링
-        filtered_docs = [doc for doc, score in results if score.relevance >= 0.3]
+        filtered_docs = [doc for doc, relevance in results if relevance >= 0.4]
 
         # 관련 문서가 없으면 웹 검색 수행
         web_search = len(filtered_docs) == 0
