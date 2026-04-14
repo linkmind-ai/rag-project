@@ -196,7 +196,7 @@ class RAGGraph:
                     "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
                     "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
                 },
-                temperature=0.7,
+                temperature=0.2,
             )
             self._rewriter_llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
@@ -370,29 +370,25 @@ class RAGGraph:
         query = state.query
         retrieved_docs = state.retrieved_docs
 
+        semaphore = asyncio.Semaphore(2)
+
         async def grade_doc(doc: Document):
             input_data = {"document": doc.content, "query": query}
-            try:
+
+            async with semaphore:
                 score = await asyncio.to_thread(
                     self._document_grader.invoke, input_data
                 )
                 relevance = score.relevance
 
-            except Exception:
-                output = str(
-                    await asyncio.to_thread(self._document_grader.invoke, input_data)
-                )
-                match = re.search(r"\d\.\d+", output)
-                relevance = float(match.group()) if match else 0.0
-
-            return doc, relevance
+                return doc, relevance
 
         # 병렬 grading 실행
         tasks = [grade_doc(doc) for doc in retrieved_docs]
         results = await asyncio.gather(*tasks)
 
         # 관련 문서 필터링
-        filtered_docs = [doc for doc, relevance in results if relevance >= 0.4]
+        filtered_docs = [doc for doc, relevance in results if relevance >= 0.5]
 
         # 관련 문서가 없으면 웹 검색 수행
         web_search = len(filtered_docs) == 0
@@ -420,26 +416,55 @@ class RAGGraph:
 
     async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
         """refined_question으로 웹 검색"""
+
         query_for_web_search = state.query_for_web_search
         retrieved_docs = state.retrieved_docs
+
+        if isinstance(query_for_web_search, dict):
+            query_for_web_search = query_for_web_search.get("query", "")
+        else:
+            query_for_web_search = str(query_for_web_search)
 
         # 웹 검색 (TAVILY_API_KEY 미설정 시 스킵)
         if self._web_search_tool is None:
             logger.warning("TAVILY_API_KEY 미설정 — 웹 검색 스킵")
             return {"retrieved_docs": retrieved_docs, "web_search": False}
 
-        docs = await asyncio.to_thread(
+        raw_result = await asyncio.to_thread(
             self._web_search_tool.invoke, query_for_web_search
         )
 
-        # 검색 결과를 문서 형식으로 변환
-        web_results = "\n".join([d["content"] for d in docs])
-        web_results = Document(
+        if raw_result is None:
+            docs = []
+
+        elif isinstance(raw_result, str):
+            docs = [{"content": raw_result}]
+
+        elif hasattr(raw_result, "content"):
+            docs = [{"content": raw_result.content}]
+
+        elif isinstance(raw_result, list):
+            docs = raw_result
+
+        else:
+            docs = [{"content": str(raw_result)}]
+
+        contents = []
+        for d in docs:
+            if isinstance(d, dict):
+                contents.append(d.get("content", ""))
+            else:
+                contents.append(str(d))
+
+        web_results_text = "\n".join(contents)
+
+        web_doc = Document(
             doc_id=f"web_{uuid.uuid4()}",
-            content=web_results,
+            content=web_results_text,
             metadata={"source": "web"},
         )
-        new_docs = retrieved_docs + [web_results]
+
+        new_docs = retrieved_docs + [web_doc]
 
         return {"retrieved_docs": new_docs}
 

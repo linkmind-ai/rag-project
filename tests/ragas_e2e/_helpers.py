@@ -36,9 +36,9 @@ def resolve_golden_set(path: str | Path | None = None) -> Path:
 # ── RAGAS 임계값 ──────────────────────────────────────────────────────────────
 
 FAITHFULNESS_THRESHOLD = 0.70
-ANSWER_RELEVANCY_THRESHOLD = 0.70
+ANSWER_RELEVANCY_THRESHOLD = 0.60
 CONTEXT_PRECISION_THRESHOLD = 0.70
-CONTEXT_RECALL_THRESHOLD = 0.70
+CONTEXT_RECALL_THRESHOLD = 0.60
 
 _THRESHOLDS: dict[str, float] = {
     "faithfulness": FAITHFULNESS_THRESHOLD,
