@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     )
     OLLAMA_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0")
     REWRITER_MODEL: str = Field(default="gemma3:4b")
-    GRADER_MODEL: str = Field(default="hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:Q4_K_M")
+    GRADER_MODEL: str = Field(default="gemma3:4b")
 
     # 엘라스틱서치 설정
     ELASTICSEARCH_URL: str = Field(
@@ -71,6 +71,9 @@ class Settings(BaseSettings):
     # Groq API 설정 (RAGAS 평가 전용)
     GROQ_API_KEY: str = Field(default="")
     GROQ_API_KEY_2: str = Field(default="")
+
+    # OpenAI API 설정 (RAGAS 평가 전용)
+    OPENAI_API_KEY: str = Field(default="")
 
     # Notion 연동 설정
     NOTION_TOKEN: str = Field(

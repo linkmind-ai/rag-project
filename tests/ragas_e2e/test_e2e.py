@@ -42,12 +42,171 @@ pytest.importorskip(
 )
 
 from ragas_e2e._helpers import ANSWER_RELEVANCY_THRESHOLD  # noqa: E402
-from ragas_e2e._helpers import (CONTEXT_PRECISION_THRESHOLD,
-                                CONTEXT_RECALL_THRESHOLD,
-                                FAITHFULNESS_THRESHOLD, build_ragas_embeddings,
-                                ragas_score, resolve_golden_set,
-                                save_e2e_result)
+from ragas_e2e._helpers import (
+    CONTEXT_PRECISION_THRESHOLD,
+    CONTEXT_RECALL_THRESHOLD,
+    FAITHFULNESS_THRESHOLD,
+    build_ragas_embeddings,
+    ragas_score,
+    resolve_golden_set,
+    save_e2e_result,
+)
 from ragas_e2e._pipeline import build_e2e_dataset  # noqa: E402
+from ragas.llms import LangchainLLMWrapper
+from ragas import evaluate
+from ragas.metrics import (
+    Faithfulness,
+    ContextPrecision,
+    AnswerRelevancy,
+    ContextRecall,
+)
+from ragas.run_config import RunConfig
+from langchain_openai import ChatOpenAI
+
+# ── TestRAGASE2EGPT ────────────────────────────────────────────────────────
+
+
+class TestRAGASE2EGPT:
+    """
+    E2E RAGAS 평가 — GPT judge 버전.
+
+    qwen → GPT로 교체한 버전.
+    """
+
+    @pytest.fixture(scope="class")
+    def gpt_judge_llm(self) -> object:
+        """GPT judge (OpenAI API 기반)"""
+        from common.config import settings
+
+        return ChatOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            model="gpt-4o-mini",
+            temperature=0,
+            max_tokens=512,
+        )
+
+    @pytest.fixture(scope="class")
+    def e2e_dataset(
+        self, request: pytest.FixtureRequest
+    ) -> tuple[object, list[dict[str, Any]]]:
+        """
+        class scope: 두 테스트 메서드에서 파이프라인 결과 재사용
+        """
+        path = resolve_golden_set(request.config.getoption("--golden-set"))
+        golden_set = json.loads(path.read_text(encoding="utf-8"))
+
+        print(
+            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 7노드)"
+        )
+
+        return asyncio.run(build_e2e_dataset(golden_set))
+
+    def test_retrieval_metrics(
+        self,
+        e2e_dataset: tuple[object, list[dict[str, Any]]],
+        gpt_judge_llm: object,
+    ) -> None:
+        """
+        Faithfulness + ContextPrecision
+        """
+        dataset, diagnostics = e2e_dataset
+
+        ragas_llm = LangchainLLMWrapper(gpt_judge_llm)
+
+        result = evaluate(
+            dataset=dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=1),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(
+                timeout=300,
+                max_retries=3,
+                max_workers=1,
+            ),
+        )
+
+        f_score = ragas_score(result, "faithfulness")
+        cp_score = ragas_score(result, "context_precision")
+        n = len(dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [E2E / GPT] 샘플: {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        save_e2e_result(
+            dataset,
+            {"faithfulness": f_score, "context_precision": cp_score},
+            diagnostics,
+        )
+
+        assert f_score >= FAITHFULNESS_THRESHOLD, (
+            f"Faithfulness {f_score:.1%} < {FAITHFULNESS_THRESHOLD:.0%}\n"
+            "  → N6 chat_prompt.py 지시 강화 / N3 grade 기준 조정"
+        )
+
+        assert cp_score >= CONTEXT_PRECISION_THRESHOLD, (
+            f"ContextPrecision {cp_score:.1%} < {CONTEXT_PRECISION_THRESHOLD:.0%}\n"
+            "  → N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정"
+        )
+
+    def test_generation_metrics(
+        self,
+        e2e_dataset: tuple[object, list[dict[str, Any]]],
+        gpt_judge_llm: object,
+    ) -> None:
+        """
+        AnswerRelevancy + ContextRecall
+        """
+        dataset, diagnostics = e2e_dataset
+
+        ragas_llm = LangchainLLMWrapper(gpt_judge_llm)
+        ragas_embeddings = build_ragas_embeddings()
+
+        result = evaluate(
+            dataset=dataset,
+            metrics=[
+                AnswerRelevancy(
+                    llm=ragas_llm,
+                    embeddings=ragas_embeddings,
+                    strictness=1,
+                ),
+                ContextRecall(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            embeddings=ragas_embeddings,
+            run_config=RunConfig(
+                timeout=300,
+                max_retries=3,
+                max_workers=1,
+            ),
+        )
+
+        ar_score = ragas_score(result, "answer_relevancy")
+        cr_score = ragas_score(result, "context_recall")
+        n = len(dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [E2E / GPT] 샘플: {n}개")
+        print(f"  AnswerRelevancy   : {ar_score:.3f} ({ar_score:.1%})")
+        print(f"  ContextRecall     : {cr_score:.3f} ({cr_score:.1%})")
+
+        save_e2e_result(
+            dataset,
+            {"answer_relevancy": ar_score, "context_recall": cr_score},
+            diagnostics,
+        )
+
+        assert ar_score >= ANSWER_RELEVANCY_THRESHOLD, (
+            f"AnswerRelevancy {ar_score:.1%} < {ANSWER_RELEVANCY_THRESHOLD:.0%}\n"
+            "  → chat_prompt.py 개선 필요"
+        )
+
+        assert cr_score >= CONTEXT_RECALL_THRESHOLD, (
+            f"ContextRecall {cr_score:.1%} < {CONTEXT_RECALL_THRESHOLD:.0%}\n"
+            "  → TOP_K_RESULTS 증가 / N3 grade 기준 완화"
+        )
+
 
 # ── TestRAGASE2EQwen25 ────────────────────────────────────────────────────────
 
@@ -106,7 +265,6 @@ class TestRAGASE2EQwen25:
           ContextPrecision → N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정
         """
         from ragas import evaluate
-        from ragas.llms import LangchainLLMWrapper
         from ragas.metrics import ContextPrecision, Faithfulness
         from ragas.run_config import RunConfig
 
@@ -121,7 +279,7 @@ class TestRAGASE2EQwen25:
                 ContextPrecision(llm=ragas_llm),
             ],
             llm=ragas_llm,
-            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+            run_config=RunConfig(timeout=600, max_retries=3, max_workers=1),
         )
 
         # --- BREAKPOINT: result로 샘플별 점수 확인 ---
@@ -163,7 +321,6 @@ class TestRAGASE2EQwen25:
         strictness=1: Ollama는 n>1 복수 completion 미지원.
         """
         from ragas import evaluate
-        from ragas.llms import LangchainLLMWrapper
         from ragas.metrics import AnswerRelevancy, ContextRecall
         from ragas.run_config import RunConfig
 
@@ -182,7 +339,7 @@ class TestRAGASE2EQwen25:
             ],
             llm=ragas_llm,
             embeddings=ragas_embeddings,
-            run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+            run_config=RunConfig(timeout=600, max_retries=3, max_workers=1),
         )
 
         # --- BREAKPOINT: result로 샘플별 AnswerRelevancy 확인 ---
@@ -264,52 +421,6 @@ class TestRAGASE2EGroq:
         )
         return asyncio.run(build_e2e_dataset(golden_set))
 
-    def test_faithfulness_and_context_precision(
-        self,
-        e2e_dataset: tuple[object, list[dict[str, Any]]],
-        groq_llm_key1: object,
-    ) -> None:
-        """[KEY_1] Faithfulness + ContextPrecision."""
-        from ragas import evaluate
-        from ragas.llms import LangchainLLMWrapper
-        from ragas.metrics import ContextPrecision, Faithfulness
-        from ragas.run_config import RunConfig
-
-        dataset, diagnostics = e2e_dataset
-        ragas_llm = LangchainLLMWrapper(groq_llm_key1)
-
-        result = evaluate(
-            dataset=dataset,
-            metrics=[
-                Faithfulness(llm=ragas_llm, max_retries=3),
-                ContextPrecision(llm=ragas_llm),
-            ],
-            llm=ragas_llm,
-            run_config=RunConfig(timeout=300, max_retries=3, max_workers=2),
-        )
-
-        # --- BREAKPOINT: 샘플별 Faithfulness 점수 확인 ---
-        f_score = ragas_score(result, "faithfulness")
-        cp_score = ragas_score(result, "context_precision")
-        n = len(dataset.samples)  # type: ignore[attr-defined]
-
-        print(f"\n  [E2E / Groq KEY_1] 샘플: {n}개")
-        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
-        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
-
-        save_e2e_result(
-            dataset,
-            {"faithfulness": f_score, "context_precision": cp_score},
-            diagnostics,
-        )
-
-        assert (
-            f_score >= FAITHFULNESS_THRESHOLD
-        ), f"Faithfulness {f_score:.1%} < {FAITHFULNESS_THRESHOLD:.0%}"
-        assert (
-            cp_score >= CONTEXT_PRECISION_THRESHOLD
-        ), f"ContextPrecision {cp_score:.1%} < {CONTEXT_PRECISION_THRESHOLD:.0%}"
-
     def test_answer_relevancy_and_context_recall(
         self,
         e2e_dataset: tuple[object, list[dict[str, Any]]],
@@ -335,7 +446,7 @@ class TestRAGASE2EGroq:
             ],
             llm=ragas_llm,
             embeddings=ragas_embeddings,
-            run_config=RunConfig(timeout=300, max_retries=3, max_workers=2),
+            run_config=RunConfig(timeout=600, max_retries=3, max_workers=1),
         )
 
         # --- BREAKPOINT: 샘플별 AnswerRelevancy 점수 확인 ---
@@ -360,6 +471,52 @@ class TestRAGASE2EGroq:
             cr_score >= CONTEXT_RECALL_THRESHOLD
         ), f"ContextRecall {cr_score:.1%} < {CONTEXT_RECALL_THRESHOLD:.0%}"
 
+    def test_faithfulness_and_context_precision(
+        self,
+        e2e_dataset: tuple[object, list[dict[str, Any]]],
+        groq_llm_key1: object,
+    ) -> None:
+        """[KEY_1] Faithfulness + ContextPrecision."""
+        from ragas import evaluate
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.metrics import ContextPrecision, Faithfulness
+        from ragas.run_config import RunConfig
+
+        dataset, diagnostics = e2e_dataset
+        ragas_llm = LangchainLLMWrapper(groq_llm_key1)
+
+        result = evaluate(
+            dataset=dataset,
+            metrics=[
+                Faithfulness(llm=ragas_llm, max_retries=3),
+                ContextPrecision(llm=ragas_llm),
+            ],
+            llm=ragas_llm,
+            run_config=RunConfig(timeout=600, max_retries=3, max_workers=1),
+        )
+
+        # --- BREAKPOINT: 샘플별 Faithfulness 점수 확인 ---
+        f_score = ragas_score(result, "faithfulness")
+        cp_score = ragas_score(result, "context_precision")
+        n = len(dataset.samples)  # type: ignore[attr-defined]
+
+        print(f"\n  [E2E / Groq KEY_1] 샘플: {n}개")
+        print(f"  Faithfulness      : {f_score:.3f} ({f_score:.1%})")
+        print(f"  ContextPrecision  : {cp_score:.3f} ({cp_score:.1%})")
+
+        save_e2e_result(
+            dataset,
+            {"faithfulness": f_score, "context_precision": cp_score},
+            diagnostics,
+        )
+
+        assert (
+            f_score >= FAITHFULNESS_THRESHOLD
+        ), f"Faithfulness {f_score:.1%} < {FAITHFULNESS_THRESHOLD:.0%}"
+        assert (
+            cp_score >= CONTEXT_PRECISION_THRESHOLD
+        ), f"ContextPrecision {cp_score:.1%} < {CONTEXT_PRECISION_THRESHOLD:.0%}"
+
 
 # ── 단독 실행 ─────────────────────────────────────────────────────────────────
 
@@ -369,12 +526,25 @@ def _build_judge_llm(judge: str) -> Any:
     judge 이름으로 LLM 인스턴스 생성.
 
     Args:
-        judge: "qwen25" 또는 "groq"
+        judge: "qwen25" 또는 "groq" 또는 "gpt"
 
     Returns:
-        ChatOllama 또는 ChatGroq 인스턴스
+        ChatOllama 또는 ChatGroq 또는 ChatOpenAI 인스턴스
     """
     from common.config import settings
+
+    if judge == "gpt":
+        from langchain_openai import ChatOpenAI
+
+        if not settings.OPENAI_API_KEY:
+            raise RuntimeError("OPENAI_API_KEY 미설정")
+
+        return ChatOpenAI(
+            api_key=settings.OPENAI_API_KEY,
+            model="gpt-4o-mini",
+            temperature=0,
+            max_tokens=512,
+        )
 
     if judge == "qwen25":
         from langchain_ollama import ChatOllama
@@ -396,7 +566,11 @@ def _build_judge_llm(judge: str) -> Any:
 
     if not settings.GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY 미설정")
-    return ChatGroq(api_key=settings.GROQ_API_KEY, model="llama-3.3-70b-versatile")
+
+    return ChatGroq(
+        api_key=settings.GROQ_API_KEY,
+        model="llama-3.3-70b-versatile",
+    )
 
 
 def _print_scores(scores: dict[str, float]) -> None:
@@ -417,20 +591,28 @@ def _print_scores(scores: dict[str, float]) -> None:
 async def _main(judge: str, golden_set_path: str | None = None) -> None:
     """
     pytest 없이 직접 실행 — 전체 파이프라인 + RAGAS 평가.
-
-    PyCharm Run Configuration:
-      Script path: tests/ragas_e2e/test_e2e.py
-      Parameters : --judge qwen25
     """
+
     from ragas import evaluate
     from ragas.llms import LangchainLLMWrapper
-    from ragas.metrics import (AnswerRelevancy, ContextPrecision,
-                               ContextRecall, Faithfulness)
+    from ragas.metrics import (
+        AnswerRelevancy,
+        ContextPrecision,
+        ContextRecall,
+        Faithfulness,
+    )
     from ragas.run_config import RunConfig
 
     path = resolve_golden_set(golden_set_path)
     golden_set = json.loads(path.read_text(encoding="utf-8"))
-    judge_label = "qwen2.5:72b" if judge == "qwen25" else "Groq llama-3.3-70b"
+
+    if judge == "qwen25":
+        judge_label = "qwen2.5:72b"
+    elif judge == "gpt":
+        judge_label = "gpt-4o-mini"
+    else:
+        judge_label = "Groq llama-3.3-70b"
+
     print(
         f"E2E 파이프라인 시작 ({len(golden_set)}개 쿼리, {path.name}, judge: {judge_label})..."
     )
@@ -452,10 +634,9 @@ async def _main(judge: str, golden_set_path: str | None = None) -> None:
         ],
         llm=ragas_llm,
         embeddings=ragas_embeddings,
-        run_config=RunConfig(timeout=300, max_retries=1, max_workers=2),
+        run_config=RunConfig(timeout=600, max_retries=3, max_workers=1),
     )
 
-    # --- BREAKPOINT: result 전체 점수 확인 ---
     scores = {
         "faithfulness": ragas_score(result, "faithfulness"),
         "context_precision": ragas_score(result, "context_precision"),
@@ -472,7 +653,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="E2E RAG 파이프라인 RAGAS 평가")
     parser.add_argument(
         "--judge",
-        choices=["qwen25", "groq"],
+        choices=["qwen25", "groq", "gpt"],
         default="qwen25",
         help="judge 모델 선택 (기본값: qwen25)",
     )
@@ -480,7 +661,7 @@ if __name__ == "__main__":
         "--golden-set",
         default=None,
         metavar="PATH",
-        help="golden_set JSON 파일 경로 (기본값: tests/golden_sets/golden_set_100.json)",
+        help="golden_set JSON 파일 경로",
     )
     args = parser.parse_args()
     asyncio.run(_main(args.judge, args.golden_set))
