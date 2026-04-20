@@ -70,11 +70,9 @@ flowchart TB
         G2["grade_documents"]:::gnode
         G3["query_rewrite\n→ search_web"]:::gnode
         G4["generate"]:::gnode
-        G5["identify_evidence"]:::gnode
         G1 --> G2
         G2 -->|관련 없음| G3 --> G4
         G2 -->|관련 있음| G4
-        G4 --> G5
     end
 
     ES["ElasticsearchStore\nhybrid search (kNN + BM25)"]:::store
@@ -88,7 +86,6 @@ flowchart TB
     G1 -.-> ES --> ESDB
     ES -.->|임베딩| OLLAMA
     G3 -.-> TAVILY
-    G4 & G5 -.-> OLLAMA
     R -.->|/notion| NOTION
 ```
 
@@ -100,22 +97,21 @@ flowchart TD
     classDef process  fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
     classDef decide   fill:#7c2d12,stroke:#ea580c,color:#fed7aa
     classDef web      fill:#3b0764,stroke:#9333ea,color:#e9d5ff
-    classDef evidence fill:#14532d,stroke:#16a34a,color:#bbf7d0
 
     START(["Query"]):::io
 
     subgraph SG1["  N1 · Retrieve  "]
-        R["hybrid_search\nbge-m3 kNN + BM25\nElasticsearch 9.2.1"]:::process
+        R["hybrid_search\n kNN + BM25"]:::process
     end
 
     subgraph SG2["  N2 · Grade Documents  "]
-        G["쿼리-문서 관련성 병렬 평가\nrelevance score threshold 0.5"]:::process
+        G["쿼리-문서 관련성 평가"]:::process
     end
 
-    DEC{{"web_search\nflag?"}}:::decide
+    DEC{{"web_search?"}}:::decide
 
     subgraph SG3["  N3 · Query Rewrite  "]
-        QR["LLM으로 웹 검색용\n쿼리 재작성"]:::web
+        QR["웹 검색용\n쿼리 재작성"]:::web
     end
 
     subgraph SG4["  N4 · Web Search  "]
@@ -123,14 +119,7 @@ flowchart TD
     end
 
     subgraph SG5["  N5 · Generate  "]
-        GEN["LLM 답변 생성\n(astream_events 토큰 스트리밍)"]:::process
-    end
-
-    subgraph SG6["  N6 · Identify Evidence  "]
-        EV1["① 키워드 후보 추출\n(한글 불용어 502개 제거, ≥10%)"]:::evidence
-        EV2["② LLM 근거 식별\n(JSON evidence_indices 반환)"]:::evidence
-        EV3["③ 하이브리드 결합\n보강 ≥20% · 환각 제거 <5%"]:::evidence
-        EV1 --> EV2 --> EV3
+        GEN["LLM 답변 생성"]:::process
     end
 
     END(["Final Answer"]):::io
@@ -142,8 +131,7 @@ flowchart TD
     DEC -- "False\n관련 문서 있음" --> GEN
     QR --> WS
     WS --> GEN
-    GEN --> EV1
-    EV3 --> END
+    GEN --> END
 
     linkStyle 4 stroke:#ef4444,stroke-width:2px
     linkStyle 5 stroke:#3b82f6,stroke-width:2px
@@ -161,7 +149,7 @@ flowchart LR
     Q["Query"]:::input
 
     subgraph EMB["Embedding"]
-        E["OllamaEmbeddings\nbge-m3:latest\n(1024 dim)"]:::input
+        E["OllamaEmbeddings\nbge-m3:latest\n"]:::input
     end
 
     subgraph VSEARCH["similarity_search"]
@@ -169,14 +157,14 @@ flowchart LR
     end
 
     subgraph KSEARCH["keyword_search"]
-        KS["BM25 + Nori 형태소\n후보 k×2"]:::search
+        KS["BM25\n후보 k×2"]:::search
     end
 
     subgraph RRF["RRF Merge  ·  rrf_k = 60"]
         direction TB
         RS1["vector score = 0.5 ÷ (60 + rank)"]:::merge
         RS2["keyword score = 0.5 ÷ (60 + rank)"]:::merge
-        RS3["merged = vector_score + keyword_score"]:::merge
+        RS3["vector_score + keyword_score"]:::merge
         RS1 --> RS3
         RS2 --> RS3
     end
