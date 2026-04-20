@@ -1,181 +1,209 @@
-# Multi-turn RAG System
+<div align="center">
 
-LangGraph 기반 멀티턴 RAG(Retrieval-Augmented Generation) 시스템입니다. Elasticsearch의 하이브리드 검색(Vector + BM25)과 Ollama LLM을 활용하여 한국어 문서에 대한 질의응답을 제공합니다.
+# LinkMind
 
-## Motivation
-LinkMind는 개인 Notion 문서를 기반으로 한 **지능형 RAG 시스템**으로,
-흩어진 노트를 **검색 · 연결 · 요약 가능한 개인 지식 베이스**로 변환하는 것을 목표로 합니다.
-기존 노트 앱은 정보가 누적될수록 다음과 같은 문제가 발생합니다
+**나의 Notion이 나를 아는 개인 AI 지식 베이스**
+
+[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.0.20-FF6B6B?style=flat-square)](https://github.com/langchain-ai/langgraph)
+[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-9.x-005571?style=flat-square&logo=elasticsearch&logoColor=white)](https://elastic.co)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+
+[개요](#-개요) · [주요 기능](#-주요-기능) · [아키텍처](#-아키텍처) · [빠른 시작](#-빠른-시작) · [API 문서](#-api-문서) · [평가 결과](#-평가-결과)
+
+</div>
+
+---
+
+## 개요
+
+LinkMind는 개인 Notion 문서를 기반으로 한 **멀티턴 RAG(Retrieval-Augmented Generation) 시스템**입니다.  
+흩어진 노트를 **검색 · 연결 · 요약 가능한 개인 지식 베이스**로 변환합니다.
+
+기존 노트 앱의 한계:
 
 - 노트 간 연결이 없어 정보가 파편화됨
 - 과거 기록을 효과적으로 재활용하기 어려움
 - 범용 AI는 개인 문맥과 표현을 충분히 반영하지 못함
 
-이러한 문제를 해결하기 위해, 사용자의 개인 DB을 기반으로 맥락 있는 답변을 생성하는 개인화된 지식 탐색 시스템을 구축했습니다.
+LinkMind는 사용자의 문서를 기반으로 **맥락 있는 답변**을 생성하는 개인화된 지식 탐색 시스템입니다.
 
-## 주요 특징
+---
 
-- **하이브리드 검색**
-    : Vector 유사도와 BM25 키워드 검색을 결합하여 
-    semantic matching과 keyword precision을 동시에 확보하고 recall 저하 문제를 완화
-- **Corrective RAG 파이프라인**
-    : 쿼리와 문서의 관련성을 기반으로 query를 web search 또는 generation 단계로 routing하여 
-    fixed RAG pipeline의 한계를 보완하는 adaptive 구조 구현 
-- **멀티턴 대화**
-    : 세션 기반 대화 이력 관리를 통해 이전 문맥을 반영한 응답 생성
-- **비동기 처리**
-    : FastAPI + aiohttp 비동기 파이프라인으로 I/O 병목을 줄이고 latency를 최소화
+## 주요 기능
+
+| 기능 | 설명 |
+|------|------|
+| **Corrective RAG** | 문서 관련성 평가 후 웹 검색으로 fallback하는 adaptive 파이프라인 |
+| **하이브리드 검색** | Vector(kNN + cosine) + BM25 키워드 검색 결합으로 recall 저하 완화 |
+| **멀티턴 대화** | 세션 기반 대화 이력 관리로 이전 문맥을 반영한 응답 생성 |
+| **스트리밍 응답** | SSE(Server-Sent Events) 기반 실시간 토큰 스트리밍 |
+| **비동기 처리** | FastAPI + aiohttp 비동기 파이프라인으로 I/O 병목 최소화 |
+| **Notion 연동** | Notion API를 통한 문서 자동 수집 및 인덱싱 |
+
+---
 
 ## 아키텍처
 
-### Corrective RAG
-
-```mermaid
-flowchart TD
-
-    %% Input
-    A[Query]
-
-    %% Subgraphs
-    subgraph N1 [N1: Retrieve]
-        C[Hybrid Search<br>cosine + BM25]
-    end
-
-    subgraph N2 [N2: Grade Documents]
-        D[쿼리 - 문서 관련성 평가]
-    end
-
-    subgraph N3 [N3: Query Rewrite]
-        E[Web Search용<br>Query 재작성]
-    end
-
-    subgraph N4 [N4: Web Search]
-        F[Tavily API<br>외부 검색]
-    end
-
-    subgraph N5 [N5: Generate]
-        G[LLM 답변 생성]
-    end
-
-    H[Final Answer]
-
-    %% Flow
-    A --> C
-    C -->|retrieved_docs| D
-
-    %% Branching
-    D -->|relevant| G
-    D -->|not relevant| E
-
-    %% Web fallback
-    E -->|query_for_web| F
-    F -->|web_docs| G
-
-    G --> H
-
-    %% Edge coloring
-    linkStyle 2 stroke:#3b82f6,stroke-width:3px,color:#3b82f6
-    linkStyle 3 stroke:#ef4444,stroke-width:3px,color:#ef4444
-```
 
 ### 시스템 구조
 
 ```mermaid
 flowchart TB
-    subgraph Client
-        REQ[HTTP Request]
-    end
+    classDef client fill:#0f172a,stroke:#475569,color:#f1f5f9
+    classDef api    fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
+    classDef gnode  fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef store  fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+    classDef ext    fill:#451a03,stroke:#d97706,color:#fde68a
+
+    C["Client\nHTTP / SSE"]:::client
 
     subgraph API["FastAPI"]
-        ROUTER[Routers]
-        SERVICE[RAGService]
+        R["Routers\n/query · /document · /search · /notion"]:::api
+        S["RAGService\n+ InMemoryStore (세션 이력)"]:::api
     end
 
-    subgraph Graph["LangGraph"]
-        N1[retrieve]
-        N2[generate]
-        N3[identify_evidence]
-        N1 --> N2 --> N3
+    subgraph G["LangGraph · RAGGraph"]
+        direction LR
+        G1["retrieve"]:::gnode
+        G2["grade_documents"]:::gnode
+        G3["query_rewrite\n→ search_web"]:::gnode
+        G4["generate"]:::gnode
+        G1 --> G2
+        G2 -->|관련 없음| G3 --> G4
+        G2 -->|관련 있음| G4
     end
 
-    subgraph External
-        ES[(Elasticsearch)]
-        OLLAMA[Ollama LLM]
-    end
+    ES["ElasticsearchStore\nhybrid search (kNN + BM25)"]:::store
 
-    REQ --> ROUTER --> SERVICE --> Graph
-    N1 -.-> ES
-    N2 -.-> OLLAMA
-    N3 -.-> OLLAMA
+    ESDB[("Elasticsearch")]:::ext
+    OLLAMA["Ollama\nLLM + bge-m3 Embeddings"]:::ext
+    TAVILY["Tavily API"]:::ext
+    NOTION["Notion API"]:::ext
+
+    C --> R --> S --> G
+    G1 -.-> ES --> ESDB
+    ES -.->|임베딩| OLLAMA
+    G3 -.-> TAVILY
+    R -.->|/notion| NOTION
 ```
 
-### 하이브리드 검색 Flow
+### Corrective RAG 파이프라인
+
+```mermaid
+flowchart TD
+    classDef io       fill:#0f172a,stroke:#334155,color:#f1f5f9,rx:16,ry:16
+    classDef process  fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
+    classDef decide   fill:#7c2d12,stroke:#ea580c,color:#fed7aa
+    classDef web      fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+
+    START(["Query"]):::io
+
+    subgraph SG1["  N1 · Retrieve  "]
+        R["hybrid_search\n kNN + BM25"]:::process
+    end
+
+    subgraph SG2["  N2 · Grade Documents  "]
+        G["쿼리-문서 관련성 평가"]:::process
+    end
+
+    DEC{{"web_search?"}}:::decide
+
+    subgraph SG3["  N3 · Query Rewrite  "]
+        QR["웹 검색용\n쿼리 재작성"]:::web
+    end
+
+    subgraph SG4["  N4 · Web Search  "]
+        WS["Tavily Search API\n외부 문서 수집"]:::web
+    end
+
+    subgraph SG5["  N5 · Generate  "]
+        GEN["LLM 답변 생성"]:::process
+    end
+
+    END(["Final Answer"]):::io
+
+    START --> R
+    R --> G
+    G --> DEC
+    DEC -- "True\n관련 문서 없음" --> QR
+    DEC -- "False\n관련 문서 있음" --> GEN
+    QR --> WS
+    WS --> GEN
+    GEN --> END
+
+    linkStyle 4 stroke:#ef4444,stroke-width:2px
+    linkStyle 5 stroke:#3b82f6,stroke-width:2px
+```
+
+### 하이브리드 검색 (RRF)
 
 ```mermaid
 flowchart LR
-    Q[Query] --> ES[ElasticsearchStore]
+    classDef input  fill:#0f172a,stroke:#334155,color:#f1f5f9
+    classDef search fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
+    classDef merge  fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef out    fill:#3b0764,stroke:#9333ea,color:#e9d5ff
 
-    ES --> VS[Vector Search<br/>kNN + cosine]
-    ES --> KS[Keyword Search<br/>BM25]
+    Q["Query"]:::input
 
-    VS --> MERGE[Score Normalization<br/>+ Weighted Merge]
-    KS --> MERGE
+    subgraph EMB["Embedding"]
+        E["OllamaEmbeddings\nbge-m3:latest\n"]:::input
+    end
 
-    MERGE --> TOP[Top-K Documents]
+    subgraph VSEARCH["similarity_search"]
+        VS["kNN cosine similarity\n후보 k×2"]:::search
+    end
+
+    subgraph KSEARCH["keyword_search"]
+        KS["BM25\n후보 k×2"]:::search
+    end
+
+    subgraph RRF["RRF Merge  ·  rrf_k = 60"]
+        direction TB
+        RS1["vector score = 0.5 ÷ (60 + rank)"]:::merge
+        RS2["keyword score = 0.5 ÷ (60 + rank)"]:::merge
+        RS3["vector_score + keyword_score"]:::merge
+        RS1 --> RS3
+        RS2 --> RS3
+    end
+
+    TOP["점수 내림차순 정렬\nTop-K 반환\nRetrievedContext"]:::out
+
+    Q --> E --> VS
+    Q --> KS
+    VS --> RS1
+    KS --> RS2
+    RS3 --> TOP
 ```
 
-**가중치**: `final_score = (vector_score × 0.5) + (keyword_score × 0.5)`
+---
 
-## 설치 방법
+## 빠른 시작
 
 ### 사전 요구사항
 
 - Python 3.11+
+- [uv](https://docs.astral.sh/uv/) (패키지 매니저)
 - Elasticsearch 9.x
-- Ollama (또는 원격 Ollama 서버)
+- Ollama (로컬 또는 원격)
 
-### macOS
+### 설치
 
 ```bash
 # 저장소 클론
-git clone https://github.com/your-repo/rag-project.git
-cd rag-project
-git switch notion-analysis
-# 의존성 설치 및 가상환경 세팅 (uv 사용)
+git clone https://github.com/your-repo/notion-rag.git
+cd notion-rag
+
+# 의존성 설치
 uv sync
 
 # 환경 변수 설정
 cp .env.sample .env
-# .env 파일을 편집하여 설정값 입력
-
-# 서버 실행
-cd apps && uv run python main.py
 ```
 
-### WSL 2 (Windows)
-
-```bash
-# WSL 2 Ubuntu 환경에서 실행
-sudo apt update && sudo apt install python3.11 python3.11-venv
-
-# 저장소 클론
-git clone https://github.com/your-repo/rag-project.git
-cd rag-project
-git switch notion-analysis
-# 의존성 설치 및 가상환경 세팅 (uv 사용)
-uv sync
-
-# 환경 변수 설정
-cp .env.sample .env
-nano .env  # 설정값 편집
-
-# 서버 실행
-cd apps && uv run python main.py
-```
-
-## 환경 변수 설정
-
-`.env` 파일에 다음 설정을 추가하세요:
+`.env` 파일을 열어 아래 값을 설정하세요:
 
 ```env
 # Elasticsearch
@@ -190,7 +218,7 @@ OLLAMA_HOST=https://your-ollama-host/
 OLLAMA_MODEL=hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16
 EMBEDDING_MODEL=bge-m3:latest
 
-# Cloudflare Access (ollama.nabee.ai.kr 사용 시 필수)
+# Cloudflare Access (원격 Ollama 사용 시)
 CF_ACCESS_CLIENT_ID=your-cf-client-id
 CF_ACCESS_CLIENT_SECRET=your-cf-client-secret
 
@@ -199,34 +227,46 @@ NOTION_TOKEN=your-notion-token
 NOTION_VERSION=2022-06-28
 ```
 
-> **Cloudflare Access 설정**
->
-> `ollama.nabee.ai.kr`은 Cloudflare Access로 보호되어 있습니다. Service Token을 발급받아 위 두 값을 설정하세요.
-> - `CF_ACCESS_CLIENT_ID`: Cloudflare Zero Trust → Access → Service Tokens에서 발급
-> - `CF_ACCESS_CLIENT_SECRET`: 발급 시 1회만 표시되므로 즉시 저장 필요
->
-> 설정된 헤더는 **Ollama (LLM + Embeddings)** 요청에만 적용됩니다. Elasticsearch(`es.nabee.ai.kr`)는 Cloudflare Access 대상이 아닙니다.
+### 실행
 
-## 사용 방법
+**1. API 서버**
 
-### API 엔드포인트
+```bash
+cd apps && uv run python main.py
+```
+
+서버가 `http://localhost:8000`에서 시작됩니다. API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
+
+**2. Streamlit UI** (별도 터미널)
+
+```bash
+cd apps_fe && uv run streamlit run app.py
+```
+
+UI가 `http://localhost:8501`에서 시작됩니다. API 서버(`localhost:8000`)가 먼저 실행 중이어야 합니다.
+
+---
+
+## API 문서
+
+### 엔드포인트
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
-| POST | `/query` | 질의응답 (동기) |
-| POST | `/query/stream` | 질의응답 (스트리밍) |
-| GET | `/health` | 헬스체크 |
-| POST | `/document/add` | 문서 추가 |
-| POST | `/search` | 검색 |
+| `POST` | `/query` | 질의응답 (동기) |
+| `POST` | `/query/stream` | 질의응답 (스트리밍) |
+| `GET` | `/health` | 헬스체크 |
+| `POST` | `/document/add` | 문서 추가 |
+| `POST` | `/search` | 문서 검색 |
 
-### 질의 예시
+### 요청 예시
 
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
   -d '{
     "query": "단일성 정체감 장애를 가진 사람의 특징은?",
-    "session_id": "test-session",
+    "session_id": "my-session",
     "use_history": false
   }'
 ```
@@ -235,13 +275,13 @@ curl -X POST http://localhost:8000/query \
 
 ```json
 {
-  "session_id": "test-session",
+  "session_id": "my-session",
   "answer": "단일성 정체감 장애 현상은...",
   "sources": [
     {
       "index": 0,
-      "content": "문서 내용...",
-      "metadata": {"page_id": "..."},
+      "content": "관련 문서 내용...",
+      "metadata": { "page_id": "..." },
       "is_evidence": true
     }
   ],
@@ -249,33 +289,26 @@ curl -X POST http://localhost:8000/query \
 }
 ```
 
-## 테스트
+---
 
-### 품질 평가 결과 (2026-03-14 기준)
+## 평가 결과
 
-**Phase 1 — 검색 품질**
+> 평가 기준일: 2026-04-14 · Judge 모델: `gpt-4o-mini` · 데이터셋: `golden_set_138` (138개 쿼리)  
+> 상세 리포트: [`tests/ragas_report.md`](tests/ragas_report.md)
 
-| 지표 | 결과 | 기준 |
-|------|-----:|-----:|
-| Hit Rate @3 | **100%** | ≥ 60% |
-| Hit Rate @5 | **100%** | ≥ 70% |
-| MRR @5 | **1.000** | ≥ 0.40 |
+### 생성 품질 (RAGAS)
 
-**Phase 2 — 생성 품질 (RAGAS 4개 메트릭)**
-
-| 지표 | 결과 | 기준 |
-|------|-----:|-----:|
-| Faithfulness | **85.4%** | ≥ 70% |
-| AnswerRelevancy | **81.5%** | ≥ 70% |
-| ContextPrecision | **92.8%** | ≥ 70% |
-| ContextRecall | **96.0%** | ≥ 70% |
-
-> 상세 내용: [`tests/rag_quality_report.md`](tests/rag_quality_report.md)
+| 지표 | 점수 |
+|------|-----:|
+| Faithfulness (충실도) | **0.8719** |
+| Context Precision (문맥 정밀도) | **0.8901** |
+| Context Recall (문맥 재현율) | **0.7654** |
+| Answer Relevancy (답변 관련성) | **0.5402** |
 
 ### 테스트 실행
 
 ```bash
-# Golden Set 자동 생성 (Ollama gemma3:4b)
+# Golden Set 자동 생성
 uv run python tests/generate_golden_set.py --size 50
 
 # Phase 1: 검색 품질 평가
@@ -284,70 +317,58 @@ uv run pytest tests/test_search_quality.py -v
 # Phase 2: 생성 품질 평가 (Groq judge)
 uv run pytest tests/test_ragas.py::TestRAGAS -v -s
 
-# Phase 2: 생성 품질 평가 (Ollama judge, rate limit 없음)
+# Phase 2: 생성 품질 평가 (Ollama judge)
 uv run pytest tests/test_ragas.py::TestRAGASOllama -v -s
 ```
+
+---
 
 ## 프로젝트 구조
 
 ```
-rag-project/
+notion-rag/
 ├── apps/
-│   ├── api.py              # FastAPI 앱 진입점
-│   ├── main.py             # 서버 실행
-│   ├── common/
-│   │   └── config.py       # 설정 관리
-│   ├── graphs/
-│   │   └── rag_graph.py    # LangGraph 워크플로우
-│   ├── models/
-│   │   ├── state.py        # GraphState, Document 등
-│   │   ├── request.py      # API 요청 모델
-│   │   └── response.py     # API 응답 모델
-│   ├── prompts/
-│   │   ├── chat_prompt.py
-│   │   └── get_evidence_prompt.py
-│   ├── routers/
-│   │   ├── query.py        # 질의응답 라우터
-│   │   ├── document.py     # 문서 관리
-│   │   └── system.py       # 시스템 헬스체크
-│   ├── services/
-│   │   └── service.py      # RAGService
+│   ├── api.py                  # FastAPI 앱 진입점
+│   ├── main.py                 # 서버 실행
+│   ├── common/config.py        # 환경 변수 설정
+│   ├── graphs/rag_graph.py     # LangGraph 워크플로우
+│   ├── models/                 # Pydantic 데이터 모델
+│   ├── prompts/                # LangChain 프롬프트 템플릿
+│   ├── routers/                # API 라우터
+│   ├── services/service.py     # RAGService (비즈니스 로직)
 │   ├── stores/
-│   │   ├── vector_store.py # Elasticsearch 연동
-│   │   └── memory_store.py # 세션 이력 관리
+│   │   ├── vector_store.py     # Elasticsearch 연동
+│   │   └── memory_store.py     # 세션 이력 관리
 │   └── utils/
-│       ├── file_processor.py
-│       └── notion_connector.py
+│       ├── file_processor.py   # PDF/DOCX/MD 파싱
+│       └── notion_connector.py # Notion API 연동
 ├── tests/
-│   ├── golden_set.json     # 평가용 질문 세트
-│   ├── final_report.md     # 테스트 리포트
-│   └── user_test_log.md    # API 테스트 로그
+│   ├── golden_set.json         # 평가용 질문 세트
+│   └── rag_quality_report.md   # 품질 평가 리포트
 ├── .env.sample
-├── .gitignore
-├── pyproject.toml        # uv 기반 의존성 통합 관리
-├── uv.lock               # 의존성 버전 고정 파일
-├── CLAUDE.md             # AI 어시스턴트 지침
-└── README.md
+├── pyproject.toml
+└── uv.lock
 ```
+
+---
 
 ## 기술 스택
 
 | 분류 | 기술 |
 |------|------|
-| API Framework | FastAPI 0.109.0 |
-| Orchestration | LangGraph 0.0.20 |
-| Search Engine | Elasticsearch 9.1.5 (하이브리드: kNN + BM25) |
-| LLM | Ollama EXAONE-4.0-1.2B |
-| Embedding | bge-m3 (1024차원, Ollama) |
-| Data Validation | Pydantic v2 |
-| 평가 프레임워크 | RAGAS 0.4.3 (4개 메트릭) |
-| RAGAS judge | Groq llama-3.3-70b 또는 Ollama gemma3:27b |
-| Golden Set 생성 | Ollama gemma3:4b |
+| API Framework | FastAPI 9.3.0 · Uvicorn 2.6.3 |
+| Orchestration | LangGraph 0.2.4 · LangChain 2025.9.1 |
+| Search Engine | Elasticsearch 9.2.1 (kNN + BM25 하이브리드) |
+| Data Validation | Pydantic v2 (21.0.0) |
+| 평가 프레임워크 | RAGAS 0.1.0 |
+| UI | Streamlit 1.0.0 |
 
-## 라이선스
-
-MIT License
+---
 
 ## 기여
 
-이슈 및 PR은 언제든 환영합니다.
+이슈 및 PR은 언제든 환영합니다. 버그 리포트, 기능 제안, 문서 개선 모두 좋습니다.
+
+## 라이선스
+
+[MIT License](LICENSE)
