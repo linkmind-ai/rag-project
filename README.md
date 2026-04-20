@@ -46,6 +46,52 @@ LinkMind는 사용자의 문서를 기반으로 **맥락 있는 답변**을 생�
 
 ## 아키텍처
 
+
+### 시스템 구조
+
+```mermaid
+flowchart TB
+    classDef client fill:#0f172a,stroke:#475569,color:#f1f5f9
+    classDef api    fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
+    classDef gnode  fill:#14532d,stroke:#16a34a,color:#bbf7d0
+    classDef store  fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+    classDef ext    fill:#451a03,stroke:#d97706,color:#fde68a
+
+    C["Client\nHTTP / SSE"]:::client
+
+    subgraph API["FastAPI"]
+        R["Routers\n/query · /document · /search · /notion"]:::api
+        S["RAGService\n+ InMemoryStore (세션 이력)"]:::api
+    end
+
+    subgraph G["LangGraph · RAGGraph"]
+        direction LR
+        G1["retrieve"]:::gnode
+        G2["grade_documents"]:::gnode
+        G3["query_rewrite\n→ search_web"]:::gnode
+        G4["generate"]:::gnode
+        G5["identify_evidence"]:::gnode
+        G1 --> G2
+        G2 -->|관련 없음| G3 --> G4
+        G2 -->|관련 있음| G4
+        G4 --> G5
+    end
+
+    ES["ElasticsearchStore\nhybrid search (kNN + BM25)"]:::store
+
+    ESDB[("Elasticsearch")]:::ext
+    OLLAMA["Ollama\nLLM + bge-m3 Embeddings"]:::ext
+    TAVILY["Tavily API"]:::ext
+    NOTION["Notion API"]:::ext
+
+    C --> R --> S --> G
+    G1 -.-> ES --> ESDB
+    ES -.->|임베딩| OLLAMA
+    G3 -.-> TAVILY
+    G4 & G5 -.-> OLLAMA
+    R -.->|/notion| NOTION
+```
+
 ### Corrective RAG 파이프라인
 
 ```mermaid
@@ -101,78 +147,6 @@ flowchart TD
 
     linkStyle 4 stroke:#ef4444,stroke-width:2px
     linkStyle 5 stroke:#3b82f6,stroke-width:2px
-```
-
-### 시스템 구조
-
-```mermaid
-flowchart TB
-    classDef client   fill:#0f172a,stroke:#475569,color:#f1f5f9
-    classDef api      fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
-    classDef router   fill:#1e3a5f,stroke:#3b82f6,color:#bfdbfe
-    classDef service  fill:#1e3a5f,stroke:#0ea5e9,color:#bae6fd
-    classDef graph    fill:#14532d,stroke:#16a34a,color:#bbf7d0
-    classDef store    fill:#3b0764,stroke:#9333ea,color:#e9d5ff
-    classDef ext      fill:#451a03,stroke:#d97706,color:#fde68a
-
-    subgraph CLIENT["Client"]
-        REQ["HTTP / SSE"]:::client
-    end
-
-    subgraph APILAYER["FastAPI  ·  api.py"]
-        MW["CORS Middleware"]:::api
-        subgraph ROUTERS["Routers"]
-            direction LR
-            RQ["/query\n/query/stream"]:::router
-            RD["/document\n/document/add_batch\n/upload"]:::router
-            RS["/search\nvector · keyword · hybrid"]:::router
-            RSE["/session"]:::router
-            RN["/notion/import"]:::router
-            RH["/health"]:::router
-        end
-    end
-
-    subgraph SVCLAYER["Service Layer"]
-        SVC["RAGService\nprocess_query\nprocess_query_stream"]:::service
-        MEM["InMemoryStore\n세션 대화 이력\nget/add_message"]:::service
-    end
-
-    subgraph GRAPHLAYER["LangGraph  ·  RAGGraph"]
-        direction LR
-        GN1["retrieve"]:::graph
-        GN2["grade_documents"]:::graph
-        GN3["query_rewrite"]:::graph
-        GN4["search_web"]:::graph
-        GN5["generate"]:::graph
-        GN6["identify_evidence"]:::graph
-        GN1 --> GN2
-        GN2 -->|False| GN5
-        GN2 -->|True| GN3 --> GN4 --> GN5
-        GN5 --> GN6
-    end
-
-    subgraph STORELAYER["Store Layer"]
-        ESS["ElasticsearchStore\nhybrid · similarity · keyword search"]:::store
-    end
-
-    subgraph EXTLAYER["External Services"]
-        ESDB[("Elasticsearch\n9.2.1")]:::ext
-        OLLAMA["Ollama\nEXAONE-4.0-1.2B\n+ bge-m3 Embeddings"]:::ext
-        TAVILY["Tavily API\nWeb Search"]:::ext
-        NOTION["Notion API"]:::ext
-    end
-
-    REQ --> MW --> ROUTERS
-    RQ --> SVC
-    SVC <--> MEM
-    SVC --> GRAPHLAYER
-    GN1 -.-> ESS
-    GN4 -.-> TAVILY
-    GN5 -.-> OLLAMA
-    GN6 -.-> OLLAMA
-    ESS --> ESDB
-    ESS -.->|"임베딩"| OLLAMA
-    RN -.-> NOTION
 ```
 
 ### 하이브리드 검색 (RRF)
