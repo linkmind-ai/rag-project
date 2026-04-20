@@ -69,7 +69,29 @@ RAG 시스템이 **내부 지식 기반 질의와 open-domain 질의 모두에 �
 
 ---
 
-## 3. 이번 평가 전 주요 변경사항
+## 3. 시스템 변경 이력
+
+이번 평가는 **선행 리팩토링(검색/임베딩/Judge/프롬프트 레이어)** 위에 **이번 회차 변경(LangGraph 노드·Generator 튜닝)**을 누적 반영한 상태에서 수행되었습니다.
+
+### 3-1. 선행 리팩토링 요약 (검색 · 임베딩 · Judge · 운영 프롬프트)
+
+> 출처: [tests/refactoring_log.md](tests/refactoring_log.md) — RAGAS 10~100건 반복 검증으로 확정된 변경.
+
+| 변경 항목 | 대상 모듈 | 관측된 효과 |
+|-----------|-----------|-------------|
+| Nori Analyzer 적용 | `vector_store.py` (인덱스 매핑 · BM25 쿼리) | 한국어 형태소 분석으로 **ContextPrecision +5.8%p**, AnswerRelevancy +9.5%p(10건 기준) |
+| RRF(Reciprocal Rank Fusion) 병합 | `vector_store.py:hybrid_search` | min-max 정규화 대비 outlier-robust, ContextPrecision 안정화 |
+| `num_candidates` k×2 → k×10 | `vector_store.py:318` | ES kNN 후보 풀 6→30, 정확도 향상 (AR 무영향 — 검색이 아닌 생성 단계가 병목임을 규명) |
+| `embed_documents` 배치 전환 | `vector_store.py:add_documents` | 재인덱싱 후에도 변화 미미 — bge-m3는 query/document 동일 벡터 공간 사용 |
+| 운영 프롬프트 방향 B 채택 | `apps/prompts/chat_prompt.py` | "질문 재인용 강제" 구조로 **AnswerRelevancy 68.3% → 76.3% (+8.0%p)** |
+| Judge 모델 최종 확정 | `tests/test_ragas.py` | gemma3:27b → qwen2.5:72b (100건에서 4개 지표 전부 최초 PASS, AR 70.8%) |
+
+**핵심 발견**:
+- **검색 로직 개선(Nori · RRF)**은 ContextPrecision·Recall을 threshold 위로 끌어올리는 데 결정적이었음.
+- **AnswerRelevancy는 검색·임베딩 파라미터(`num_candidates`, `embed_documents`)에 거의 반응하지 않음** → 병목은 **생성 단계 프롬프트**임이 반복 검증으로 규명.
+- **Judge 모델 간 편차가 크다**: 동일 파이프라인에서 GROQ llama-3.3-70b 83.5%, gemma3:27b 68.8%, qwen2.5:72b 70.8% — AnswerRelevancy는 judge에 따라 ±15%p 진폭.
+
+### 3-2. 이번 평가 회차 변경사항 (LangGraph 노드 · Generator)
 
 | 변경 항목 | 내용 |
 |-----------|------|
@@ -77,8 +99,9 @@ RAG 시스템이 **내부 지식 기반 질의와 open-domain 질의 모두에 �
 | Generator 온도 조정 | `0.7` → `0.2` |
 | Grade Documents 노드 | relevancy threshold 튜닝 |
 | 프롬프트 수정 | `grade_document`, `query_rewrite` 프롬프트 개선 |
+| Judge 모델 변경 | qwen2.5:72b(로컬) → **gpt-4o-mini**(이번 회차) |
 
-**효과**: Faithfulness·Context Precision·Context Recall 모두 임계값을 상회하는 결과를 달성. 특히 Context Precision(0.89)은 grader 모델 교체와 threshold 튜닝의 복합 효과로 보임.
+**효과**: Faithfulness·Context Precision·Context Recall 모두 임계값을 상회하는 결과를 달성. 특히 Context Precision(0.89)은 grader 모델 교체와 threshold 튜닝의 복합 효과로 보임. 단, **Judge가 qwen2.5:72b(AR 70.8%) → gpt-4o-mini(AR 54.0%)로 바뀐 점을 고려할 때, AR 하락의 상당 부분은 judge 민감도 차이일 가능성**이 있음(§3-1 발견 참고).
 
 ---
 

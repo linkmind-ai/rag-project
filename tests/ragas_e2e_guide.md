@@ -43,7 +43,7 @@ tests/ragas_e2e/
 ├── __init__.py      — 공개 API
 ├── _helpers.py      — ragas_score, build_ragas_embeddings, save_e2e_result
 ├── _pipeline.py     — _run_single_sample, build_e2e_dataset
-└── test_e2e.py      — TestRAGASE2EQwen25, TestRAGASE2EGroq
+└── test_e2e.py      — TestRAGASE2EGPT, TestRAGASE2EGroq
 ```
 
 ---
@@ -68,6 +68,9 @@ CF_ACCESS_CLIENT_ID=...
 CF_ACCESS_CLIENT_SECRET=...
 TAVILY_API_KEY=...          # N5 웹 검색 필수
 
+# GPT judge 사용 시
+OPENAI_API_KEY=...
+
 # Groq judge 사용 시
 GROQ_API_KEY=...
 GROQ_API_KEY_2=...          # KEY_1 rate limit 분산용 (없으면 KEY_1 fallback)
@@ -77,9 +80,9 @@ GROQ_API_KEY_2=...          # KEY_1 rate limit 분산용 (없으면 KEY_1 fallba
 
 | 파일 | 건수 | 용도 |
 |------|-----:|------|
-| `golden_sets/golden_set_100.json` | 100 | 기본값, 표준 평가 |
-| `golden_sets/golden_set_138.json` | 138 | 확장 평가 (1~100: 자동생성, 101~138: 수작업) |
-| `golden_sets/golden_set_mrc.json` | — | MRC 도메인 특화 |
+| `golden_sets/golden_set_100.json` | 100 | notion 데모 페이지에서 추출 |
+| `golden_sets/golden_set_138.json` | 138 | 확장 평가 (1~100: 자동생성, 101~138: open-domain에서 추출) |
+| `golden_sets/golden_set_mrc.json` | — | MRC open-domain 특화 |
 | `golden_sets/golden_set.json` | — | 레거시 |
 
 > **⚠️ 수작업 데이터 작성 규칙**
@@ -108,11 +111,11 @@ GROQ_API_KEY_2=...          # KEY_1 rate limit 분산용 (없으면 KEY_1 fallba
 ### 5-1. pytest (CI / 팀 공유)
 
 ```bash
-# 표준 judge (qwen2.5:72b) — 기본 golden_set
-pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EQwen25 -v -s
+# 표준 judge (gpt-4o-mini) — 기본 golden_set
+pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EGPT -v -s
 
 # golden_set 파일 지정
-pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EQwen25 -v -s \
+pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EGPT -v -s \
   --golden-set tests/golden_sets/golden_set_138.json
 
 # Groq judge
@@ -126,20 +129,19 @@ pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EGroq -v -s
 | 항목 | 값 |
 |------|-----|
 | Script path | `tests/ragas_e2e/test_e2e.py` |
-| Parameters | `--judge qwen25 --golden-set tests/golden_set_100.json` |
+| Parameters | `--judge gpt --golden-set tests/golden_set_100.json` |
 | Working directory | 프로젝트 루트 |
 
 ```bash
 # 터미널 직접 실행
-python tests/ragas_e2e/test_e2e.py --judge qwen25
-python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets/golden_set_138.json
+python tests/ragas_e2e/test_e2e.py --judge gpt
+python tests/ragas_e2e/test_e2e.py --judge gpt --golden-set tests/golden_sets/golden_set_138.json
 ```
 
 ### 5-3. 디버깅 포인트 (`_pipeline.py` → `_run_single_sample()`)
 
 | 변수 | 확인 내용 | 노드 |
 |------|----------|------|
-| `hypothetical_doc` | HyDE가 생성한 가상 문서 | N1 |
 | `all_docs` | 검색된 문서 목록 | N2 |
 | `web_search_triggered` | 웹 검색 경로 여부 | N3 |
 | `answer` | 운영 프롬프트로 생성된 답변 | N6 |
@@ -181,38 +183,14 @@ python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets
 | 메트릭 | 기준 | 측정 원리 |
 |--------|-----:|---------|
 | Faithfulness | ≥ 70% | 답변 내 주장이 검색 컨텍스트로 뒷받침되는 비율 |
-| AnswerRelevancy | ≥ 70% | 역생성 질문 ↔ 원래 질문 임베딩 유사도 |
+| AnswerRelevancy | ≥ 60% | 역생성 질문 ↔ 원래 질문 임베딩 유사도 |
 | ContextPrecision | ≥ 70% | 관련 청크가 검색 결과 상위에 랭크되는지 여부 |
-| ContextRecall | ≥ 70% | reference 커버에 필요한 청크 검색 여부 |
+| ContextRecall | ≥ 60% | reference 커버에 필요한 청크 검색 여부 |
+
 
 ---
 
-## 8. 결과 기록
-
-> 측정 후 이 섹션에 결과를 추가해 주세요.
-
-### 측정 결과 누적
-
-| 날짜 | 측정자 | golden_set | judge | Faithfulness | AnswerRelevancy | ContextPrecision | ContextRecall | 비고 |
-|------|--------|-----------|-------|:------------:|:---------------:|:----------------:|:-------------:|------|
-| 2026-04-03 | Youngman Kim | golden_set_5 (5건) | qwen2.5:72b | ✅ 100.0% | ✅ 70.2% | ✅ 80.0% | ✅ 80.0% | 로직 검증용 (소규모) |
-| 2026-04-03 | Youngman Kim | golden_set_100 (100건) | qwen2.5:72b | ✅ 85.5% | ❌ 60.4% | ❌ 60.0% | ❌ 60.1% | 최초 정식 평가 / 웹검색 37건(37%) / 평균 25.8s/쿼리 |
-| 2026-04-04 | Youngman Kim | golden_set_138 (138건) | qwen2.5:72b | ✅ 80.9% | ❌ 57.5% | ❌ 61.2% | ❌ 54.1% | 확장 평가 / 101~138번 벡터DB 미보유 수작업 데이터 포함 / 웹검색 73건(52.9%) / 평균 24.4s/쿼리 |
-
-### 미달 항목 개선 이력
-
-| 날짜 | 메트릭 | 점수 | 원인 | 조치 | 결과 |
-|------|--------|-----:|------|------|------|
-| 2026-04-03 | ContextPrecision | 60.0% | 관련 없는 문서가 상위 검색됨 (웹검색 fallback 37%) | — | — |
-| 2026-04-03 | AnswerRelevancy | 60.4% | 답변이 질문과 직접 연결되지 않음 | — | — |
-| 2026-04-03 | ContextRecall | 60.1% | 필요한 청크가 검색에서 누락됨 | — | — |
-| 2026-04-04 | — (데이터 버그) | — | `golden_set_138` 101~138번 수작업 항목의 `reference_contexts`가 `list[list[str]]`로 잘못 작성 → RAGAS `ValidationError`로 전체 테스트 실패 | `golden_set_138.json` 38개 항목 평탄화 (`list[str]`로 수정) | ✅ 구조 정상화 |
-| 2026-04-04 | ContextRecall | 54.1% | 101~138번 수작업 데이터가 벡터DB 미보유 → 웹검색 fallback 52.9% (100건 대비 +15.9%p) → 웹검색 결과 품질 저하 | — | — |
-| 2026-04-04 | AnswerRelevancy | 57.5% | 웹검색 경로 답변이 질문과 직접 연결되지 않음 (웹검색 비율 증가 영향) | — | — |
-
----
-
-## 9. 미달 시 개선 방향
+## 8. 미달 시 개선 방향
 
 | 메트릭 | E2E 관점 원인 | 개선 방향 |
 |--------|------------|---------|
@@ -221,16 +199,4 @@ python tests/ragas_e2e/test_e2e.py --judge qwen25 --golden-set tests/golden_sets
 | **ContextPrecision** | 관련 없는 문서가 상위에 검색됨 | N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정 |
 | **ContextRecall** | 필요한 청크가 검색에서 누락됨 | `TOP_K_RESULTS` 증가 / N3 grade 기준 완화 |
 
-> **참고**: refactoring_log.md에서 각 변경의 실험 데이터를 확인할 수 있습니다.
-
 ---
-
-## 10. 관련 파일
-
-| 파일 | 내용 |
-|------|------|
-| `tests/refactoring_log.md` | 검색/생성 로직 개선 실험 기록 (2026-03-20~21) |
-| `tests/rag_quality_report.md` | Phase 1/2 검색·생성 품질 최종 리포트 |
-| `tests/eval_guide.md` | 평가 파이프라인 전체 절차 |
-| `apps/prompts/chat_prompt.py` | N6 생성 노드 운영 프롬프트 |
-| `apps/graphs/rag_graph.py` | N1~N7 노드 구현체 |

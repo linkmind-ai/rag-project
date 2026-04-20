@@ -1,24 +1,22 @@
 <div align="center">
+<img src="https://capsule-render.vercel.app/api?type=transparent&color=auto&height=300&section=header&text=🔗%20LinkMind&fontSize=90&fontColor=8b5cf6&animation=fadeIn" />
 
-# LinkMind
+**Notion 기반 나만의 RAG 챗봇 비서**
 
-**나의 Notion이 나를 아는 개인 AI 지식 베이스**
-
-[![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
-[![LangGraph](https://img.shields.io/badge/LangGraph-0.0.20-FF6B6B?style=flat-square)](https://github.com/langchain-ai/langgraph)
-[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-9.x-005571?style=flat-square&logo=elasticsearch&logoColor=white)](https://elastic.co)
+[![LangGraph](https://img.shields.io/badge/LangGraph-0.x-FF6B6B?style=flat-square)](https://github.com/langchain-ai/langgraph)
+[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-9.1-005571?style=flat-square&logo=elasticsearch&logoColor=white)](https://elastic.co)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 
-[개요](#-개요) · [주요 기능](#-주요-기능) · [아키텍처](#-아키텍처) · [빠른 시작](#-빠른-시작) · [API 문서](#-api-문서) · [평가 결과](#-평가-결과)
 
 </div>
 
 ---
 
-## 개요
+## Overview
 
-LinkMind는 개인 Notion 문서를 기반으로 한 **멀티턴 RAG(Retrieval-Augmented Generation) 시스템**입니다.  
+LinkMind는 개인 Notion 문서를 기반으로 한 **멀티턴 RAG 시스템**입니다.  
 흩어진 노트를 **검색 · 연결 · 요약 가능한 개인 지식 베이스**로 변환합니다.
 
 기존 노트 앱의 한계:
@@ -31,23 +29,21 @@ LinkMind는 사용자의 문서를 기반으로 **맥락 있는 답변**을 생�
 
 ---
 
-## 주요 기능
+## Key Features
 
-| 기능 | 설명 |
-|------|------|
-| **Corrective RAG** | 문서 관련성 평가 후 웹 검색으로 fallback하는 adaptive 파이프라인 |
-| **하이브리드 검색** | Vector(kNN + cosine) + BM25 키워드 검색 결합으로 recall 저하 완화 |
-| **멀티턴 대화** | 세션 기반 대화 이력 관리로 이전 문맥을 반영한 응답 생성 |
-| **스트리밍 응답** | SSE(Server-Sent Events) 기반 실시간 토큰 스트리밍 |
-| **비동기 처리** | FastAPI + aiohttp 비동기 파이프라인으로 I/O 병목 최소화 |
-| **Notion 연동** | Notion API를 통한 문서 자동 수집 및 인덱싱 |
+- **Corrective RAG**: 문서 관련성 평가 후 웹 검색으로 fallback하는 adaptive 파이프라인
+- **하이브리드 검색**: Vector(cosine similarity) + BM25 키워드 검색 결합으로 recall 저하 완화
+- **멀티턴 대화**: 세션 기반 대화 이력 관리로 이전 문맥을 반영한 응답 생성
+- **스트리밍 응답**: SSE(Server-Sent Events) 기반 실시간 토큰 스트리밍
+- **비동기 처리**: FastAPI + aiohttp 비동기 파이프라인으로 I/O 병목 최소화
+- **Notion 연동**: Notion API를 통한 문서 자동 수집 및 인덱싱
 
 ---
 
-## 아키텍처
+## Architecture
 
 
-### 시스템 구조
+### System Architecture
 
 ```mermaid
 flowchart TB
@@ -89,7 +85,7 @@ flowchart TB
     R -.->|/notion| NOTION
 ```
 
-### Corrective RAG 파이프라인
+### Corrective RAG Pipeline
 
 ```mermaid
 flowchart TD
@@ -143,7 +139,7 @@ flowchart TD
     linkStyle 7 stroke:#ffffff,stroke-width:2px
 ```
 
-### 하이브리드 검색 (RRF)
+### Hybrid Search
 
 ```mermaid
 flowchart LR
@@ -186,16 +182,16 @@ flowchart LR
 
 ---
 
-## 빠른 시작
+## Quick Start
 
-### 사전 요구사항
+### Prerequisites
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/) (패키지 매니저)
 - Elasticsearch 9.x
 - Ollama (로컬 또는 원격)
 
-### 설치
+### Installation
 
 ```bash
 # 저장소 클론
@@ -221,8 +217,8 @@ VEC_DIMS=1024
 
 # Ollama
 OLLAMA_HOST=https://your-ollama-host/
-OLLAMA_MODEL=hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16
-EMBEDDING_MODEL=bge-m3:latest
+OLLAMA_MODEL="hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0"
+EMBEDDING_MODEL="bge-m3:latest"
 
 # Cloudflare Access (원격 Ollama 사용 시)
 CF_ACCESS_CLIENT_ID=your-cf-client-id
@@ -233,7 +229,7 @@ NOTION_TOKEN=your-notion-token
 NOTION_VERSION=2022-06-28
 ```
 
-### 실행
+### Running
 
 **1. API 서버**
 
@@ -241,7 +237,7 @@ NOTION_VERSION=2022-06-28
 cd apps && uv run python main.py
 ```
 
-서버가 `http://localhost:8000`에서 시작됩니다. API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
+서버가 `http://localhost:8000`에서 시작됩니다.<br>API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
 
 **2. Streamlit UI** (별도 터미널)
 
@@ -249,13 +245,13 @@ cd apps && uv run python main.py
 cd apps_fe && uv run streamlit run app.py
 ```
 
-UI가 `http://localhost:8501`에서 시작됩니다. API 서버(`localhost:8000`)가 먼저 실행 중이어야 합니다.
+UI가 `http://localhost:8501`에서 시작됩니다.<br>API 서버(`localhost:8000`)가 먼저 실행 중이어야 합니다.
 
 ---
 
-## API 문서
+## API
 
-### 엔드포인트
+### Endpoints
 
 | Method | Endpoint | 설명 |
 |--------|----------|------|
@@ -265,7 +261,7 @@ UI가 `http://localhost:8501`에서 시작됩니다. API 서버(`localhost:8000`
 | `POST` | `/document/add` | 문서 추가 |
 | `POST` | `/search` | 문서 검색 |
 
-### 요청 예시
+### Request Example
 
 ```bash
 curl -X POST http://localhost:8000/query \
@@ -277,7 +273,7 @@ curl -X POST http://localhost:8000/query \
   }'
 ```
 
-### 응답 예시
+### Response Example
 
 ```json
 {
@@ -297,12 +293,14 @@ curl -X POST http://localhost:8000/query \
 
 ---
 
-## 평가 결과
+## Evaluation
 
-> 평가 기준일: 2026-04-14 · Judge 모델: `gpt-4o-mini` · 데이터셋: `golden_set_138` (138개 쿼리)  
+> 평가 기준일: 2026-04-14
+> Judge 모델: `gpt-4o-mini`
+> 데이터셋: `golden_set_138.json` (138개 쿼리)
 > 상세 리포트: [`tests/ragas_report.md`](tests/ragas_report.md)
 
-### 생성 품질 (RAGAS)
+### RAGAS Evaluation Results
 
 | 지표 | 점수 |
 |------|-----:|
@@ -311,25 +309,19 @@ curl -X POST http://localhost:8000/query \
 | Context Recall (문맥 재현율) | **0.7654** |
 | Answer Relevancy (답변 관련성) | **0.5402** |
 
-### 테스트 실행
+### Running Tests
 
 ```bash
 # Golden Set 자동 생성
 uv run python tests/generate_golden_set.py --size 50
 
-# Phase 1: 검색 품질 평가
-uv run pytest tests/test_search_quality.py -v
-
-# Phase 2: 생성 품질 평가 (Groq judge)
-uv run pytest tests/test_ragas.py::TestRAGAS -v -s
-
-# Phase 2: 생성 품질 평가 (Ollama judge)
-uv run pytest tests/test_ragas.py::TestRAGASOllama -v -s
+# RAGAS 평가 (GPT judge)
+uv run pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EGPT -v -s --golden-set your-golden-set
 ```
 
 ---
 
-## 프로젝트 구조
+## Project Structure
 
 ```
 notion-rag/
@@ -350,7 +342,7 @@ notion-rag/
 │       └── notion_connector.py # Notion API 연동
 ├── tests/
 │   ├── golden_set.json         # 평가용 질문 세트
-│   └── rag_quality_report.md   # 품질 평가 리포트
+│   └── ragas_report.md         # 품질 평가 리포트
 ├── .env.sample
 ├── pyproject.toml
 └── uv.lock
@@ -358,23 +350,23 @@ notion-rag/
 
 ---
 
-## 기술 스택
+## Tech Stack
 
 | 분류 | 기술 |
 |------|------|
-| API Framework | FastAPI 9.3.0 · Uvicorn 2.6.3 |
-| Orchestration | LangGraph 0.2.4 · LangChain 2025.9.1 |
-| Search Engine | Elasticsearch 9.2.1 (kNN + BM25 하이브리드) |
-| Data Validation | Pydantic v2 (21.0.0) |
-| 평가 프레임워크 | RAGAS 0.1.0 |
-| UI | Streamlit 1.0.0 |
+| API Framework | FastAPI 0.109.0 · Uvicorn 0.27.0 |
+| Orchestration | LangGraph · LangChain 0.1.0 |
+| Search Engine | Elasticsearch 9.1.2 |
+| Data Validation | Pydantic 2.7.4 |
+| 평가 프레임워크 | RAGAS 0.4.3 |
+| UI | Streamlit 1.51.0 |
 
 ---
 
-## 기여
+## Contribution
 
 이슈 및 PR은 언제든 환영합니다. 버그 리포트, 기능 제안, 문서 개선 모두 좋습니다.
 
-## 라이선스
+## License
 
 [MIT License](LICENSE)
