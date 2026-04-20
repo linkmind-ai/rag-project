@@ -1,5 +1,5 @@
 <div align="center">
-<img src="https://capsule-render.vercel.app/api?type=transparent&color=auto&height=300&section=header&text=🔗%20LinkMind&fontSize=90&animation=fadeIn" />
+<img src="https://capsule-render.vercel.app/api?type=transparent&color=auto&height=300&section=header&text=🔗%20LinkMind&fontSize=90&fontColor=8b5cf6&animation=fadeIn" />
 
 **Notion 기반 나만의 RAG 챗봇 비서**
 
@@ -217,8 +217,8 @@ VEC_DIMS=1024
 
 # Ollama
 OLLAMA_HOST=https://your-ollama-host/
-OLLAMA_MODEL=hf.co/LGAI-EXAONE/EXAONE-4.0-1.2B-GGUF:BF16
-EMBEDDING_MODEL=bge-m3:latest
+OLLAMA_MODEL="hf.co/LGAI-EXAONE/EXAONE-4.0-32B-GGUF:Q8_0"
+EMBEDDING_MODEL="bge-m3:latest"
 
 # Cloudflare Access (원격 Ollama 사용 시)
 CF_ACCESS_CLIENT_ID=your-cf-client-id
@@ -237,7 +237,7 @@ NOTION_VERSION=2022-06-28
 cd apps && uv run python main.py
 ```
 
-서버가 `http://localhost:8000`에서 시작됩니다. API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
+서버가 `http://localhost:8000`에서 시작됩니다.<br>API 문서는 `http://localhost:8000/docs`에서 확인할 수 있습니다.
 
 **2. Streamlit UI** (별도 터미널)
 
@@ -245,7 +245,7 @@ cd apps && uv run python main.py
 cd apps_fe && uv run streamlit run app.py
 ```
 
-UI가 `http://localhost:8501`에서 시작됩니다. API 서버(`localhost:8000`)가 먼저 실행 중이어야 합니다.
+UI가 `http://localhost:8501`에서 시작됩니다.<br>API 서버(`localhost:8000`)가 먼저 실행 중이어야 합니다.
 
 ---
 
@@ -295,7 +295,9 @@ curl -X POST http://localhost:8000/query \
 
 ## Evaluation
 
-> 평가 기준일: 2026-04-14 · Judge 모델: `gpt-4o-mini` · 데이터셋: `golden_set_138` (138개 쿼리)  
+> 평가 기준일: 2026-04-14
+> Judge 모델: `gpt-4o-mini`
+> 데이터셋: `golden_set_138.json` (138개 쿼리)
 > 상세 리포트: [`tests/ragas_report.md`](tests/ragas_report.md)
 
 ### RAGAS Evaluation Results
@@ -313,14 +315,8 @@ curl -X POST http://localhost:8000/query \
 # Golden Set 자동 생성
 uv run python tests/generate_golden_set.py --size 50
 
-# Phase 1: 검색 품질 평가
-uv run pytest tests/test_search_quality.py -v
-
-# Phase 2: 생성 품질 평가 (Groq judge)
-uv run pytest tests/test_ragas.py::TestRAGAS -v -s
-
-# Phase 2: 생성 품질 평가 (Ollama judge)
-uv run pytest tests/test_ragas.py::TestRAGASOllama -v -s
+# RAGAS 평가 (GPT judge)
+uv run pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EGPT -v -s --golden-set your-golden-set
 ```
 
 ---
