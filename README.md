@@ -133,8 +133,14 @@ flowchart TD
     WS --> GEN
     GEN --> END
 
+    linkStyle 0 stroke:#ffffff,stroke-width:2px
+    linkStyle 1 stroke:#ffffff,stroke-width:2px
+    linkStyle 2 stroke:#ffffff,stroke-width:2px
+    linkStyle 3 stroke:#3b82f6,stroke-width:2px
     linkStyle 4 stroke:#ef4444,stroke-width:2px
-    linkStyle 5 stroke:#3b82f6,stroke-width:2px
+    linkStyle 5 stroke:#ffffff,stroke-width:2px
+    linkStyle 6 stroke:#ffffff,stroke-width:2px
+    linkStyle 7 stroke:#ffffff,stroke-width:2px
 ```
 
 ### 하이브리드 검색 (RRF)
