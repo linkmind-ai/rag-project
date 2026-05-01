@@ -1,16 +1,16 @@
 {
-  "evaluated_at": "2026-04-14T19:37:38.963967",
+  "evaluated_at": "2026-05-01T20:04:47.642937",
   "pipeline": "RAGService.process_query() → RAGGraph (N1~N7)",
   "summary": {
-    "faithfulness": 0.8719,
-    "context_precision": 0.8901,
+    "faithfulness": 0.7516,
+    "context_precision": 0.901,
     "faithfulness_pass": true,
     "answer_relevancy_pass": false,
     "context_precision_pass": true,
     "context_recall_pass": true,
     "total_queries": 138,
-    "answer_relevancy": 0.5402,
-    "context_recall": 0.7654
+    "answer_relevancy": 0.5306,
+    "context_recall": 0.7786
   },
   "thresholds": {
     "faithfulness": 0.7,

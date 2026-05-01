@@ -308,7 +308,6 @@ class RAGGraph:
         workflow = StateGraph(GraphState)
 
         # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
-        # workflow.add_node("hyde", self._hyde_node)
         workflow.add_node("retrieve", self._retrieve_node)
         workflow.add_node("grade_documents", self._grade_documents_node)
         workflow.add_node("query_rewrite", self._query_rewrite_node)
@@ -317,7 +316,6 @@ class RAGGraph:
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
         # 진입점 설정: 그래프 실행 시 첫 번째로 실행될 노드
-        # workflow.set_entry_point("hyde")
         workflow.set_entry_point("retrieve")
 
         # 엣지 연결: 노드 간 순차 실행 순서 정의
@@ -339,17 +337,6 @@ class RAGGraph:
 
         # 컴파일: 정의된 그래프를 실행 가능한 형태로 변환
         self._graph = workflow.compile()
-
-    async def _hyde_node(self, state: GraphState) -> dict[str, Any]:
-        """query에 대한 답변으로 가상 문서를 생성"""
-        query = state.query
-
-        hypothetical_doc = await asyncio.to_thread(
-            self._hyde_docs_generator.invoke, {"query": query}
-        )
-        logger.info(f"Query: {query}, [HyDE] hypothetical_doc: {hypothetical_doc}")
-
-        return {"hypothetical_doc": hypothetical_doc}
 
     async def _retrieve_node(self, state: GraphState) -> dict[str, Any]:
         """검색 노드"""

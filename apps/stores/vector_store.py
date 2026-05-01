@@ -270,7 +270,9 @@ class ElasticsearchStore:
             origin_doc_id = doc.doc_id or self._generate_doc_id(
                 doc.content, doc.metadata
             )
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings, strict=True)):
+            for i, (chunk, embedding) in enumerate(
+                zip(chunks, embeddings, strict=True)
+            ):
                 chunk_metadata = {
                     **doc.metadata,
                     "chunk_index": i,
@@ -418,8 +420,7 @@ class ElasticsearchStore:
         - 두 검색 모두에서 등장한 문서는 RRF 점수가 누적되어 상위 랭크
 
         수식:
-            rrf_score = vector_weight × (1/(60+vec_rank))
-                      + (1-vector_weight) × (1/(60+kw_rank))
+            rrf_score = vector_weight × (1/(60+vec_rank)) + (1-vector_weight) × (1/(60+kw_rank))
 
         Args:
             query: 검색 쿼리 문자열
