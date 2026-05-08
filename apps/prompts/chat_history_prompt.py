@@ -1,3 +1,5 @@
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
 _CHAT_WITH_HISTORY_PROMPT = ChatPromptTemplate.from_messages(
     [
         (
