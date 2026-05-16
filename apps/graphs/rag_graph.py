@@ -125,10 +125,10 @@ class RAGGraph:
         self._lock = asyncio.Lock()
         self.chat_prompt = _CHAT_PROMPT
         self.chat_with_history_prompt = _CHAT_WITH_HISTORY_PROMPT
-        self.hyde_prompt = _HYDE_PROMPT
+        # self.hyde_prompt = _HYDE_PROMPT
         self.get_evidence_prompt = _GET_EVIDENCE_PROMPT
         self.grade_document_prompt = _GRADE_PROMPT
-        self.query_rewrite_prompt = _REWRITE_FOR_WEB_SEARCH_PROMPT
+        # self.query_rewrite_prompt = _REWRITE_FOR_WEB_SEARCH_PROMPT
 
     async def __aenter__(self) -> "RAGGraph":
         """
@@ -198,15 +198,15 @@ class RAGGraph:
                 },
                 temperature=0.2,
             )
-            self._rewriter_llm = Ollama(
-                base_url=settings.OLLAMA_BASE_URL,
-                model=settings.REWRITER_MODEL,
-                headers={
-                    "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
-                    "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
-                },
-                temperature=0.2,
-            )
+            # self._rewriter_llm = Ollama(
+            #     base_url=settings.OLLAMA_BASE_URL,
+            #     model=settings.REWRITER_MODEL,
+            #     headers={
+            #         "CF-Access-Client-Id": settings.CF_ACCESS_CLIENT_ID,
+            #         "CF-Access-Client-Secret": settings.CF_ACCESS_CLIENT_SECRET,
+            #     },
+            #     temperature=0.2,
+            # )
             self._grader_llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.GRADER_MODEL,
@@ -216,25 +216,20 @@ class RAGGraph:
                 },
                 temperature=0.0,
             )
-
-            self._hyde_docs_generator = (
-                self.hyde_prompt | self._rewriter_llm | StrOutputParser()
-            )
             self._document_grader = (
                 self.grade_document_prompt
                 | self._grader_llm
                 | PydanticOutputParser(pydantic_object=GradeDocuments)
             )
-            self._query_rewriter = (
-                self.query_rewrite_prompt | self._rewriter_llm | StrOutputParser()
-            )
+            # self._query_rewriter = (
+            #     self.query_rewrite_prompt | self._rewriter_llm | StrOutputParser()
+            # )
 
-            if settings.TAVILY_API_KEY:
-                os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
-                self._web_search_tool = TavilySearchResults(max_results=2)
-            else:
-                self._web_search_tool = None
-            # self._prompt_compressor = None
+            # if settings.TAVILY_API_KEY:
+            #     os.environ["TAVILY_API_KEY"] = settings.TAVILY_API_KEY
+            #     self._web_search_tool = TavilySearchResults(max_results=2)
+            # else:
+            #     self._web_search_tool = None
 
             self._build_graph()
             self._initialized = True
@@ -310,8 +305,8 @@ class RAGGraph:
         # 노드 등록: 각 노드는 상태를 받아 부분 상태를 반환
         workflow.add_node("retrieve", self._retrieve_node)
         workflow.add_node("grade_documents", self._grade_documents_node)
-        workflow.add_node("query_rewrite", self._query_rewrite_node)
-        workflow.add_node("search_web", self._web_search_node)
+        # workflow.add_node("query_rewrite", self._query_rewrite_node)
+        # workflow.add_node("search_web", self._web_search_node)
         workflow.add_node("generate", self._generate_node)
         workflow.add_node("identify_evidence", self._identify_evidence_node)
 
@@ -319,19 +314,8 @@ class RAGGraph:
         workflow.set_entry_point("retrieve")
 
         # 엣지 연결: 노드 간 순차 실행 순서 정의
-        # workflow.add_edge("hyde", "retrieve")
         workflow.add_edge("retrieve", "grade_documents")
-        workflow.add_conditional_edges(
-            "grade_documents",
-            self._decide_to_web_search,
-            {
-                "query_rewrite": "query_rewrite",
-                "generate": "generate",
-            },
-        )
-        workflow.add_edge("query_rewrite", "search_web")
-        workflow.add_edge("search_web", "generate")
-
+        workflow.add_edge("grade_documents", "generate")
         workflow.add_edge("generate", "identify_evidence")
         workflow.add_edge("identify_evidence", END)  # END는 그래프 종료 마커
 
@@ -341,10 +325,6 @@ class RAGGraph:
     async def _retrieve_node(self, state: GraphState) -> dict[str, Any]:
         """검색 노드"""
         query = state.query
-        # hypothetical_doc = state.hypothetical_doc
-
-        # query_for_retrieval = f"{query}\n{hypothetical_doc}"
-
         context = await elasticsearch_store.hybrid_search(
             query=query, k=settings.TOP_K_RESULTS, vector_weight=0.5
         )
@@ -376,122 +356,91 @@ class RAGGraph:
 
         # 관련 문서 필터링
         filtered_docs = [doc for doc, relevance in results if relevance >= 0.5]
-
-        # 관련 문서가 없으면 웹 검색 수행
-        web_search = len(filtered_docs) == 0
         logger.info(
-            f"[CRAG] web_search={web_search}, filtered_docs={len(filtered_docs)}"
+            f"[CRAG] has_relevant_docs={len(filtered_docs) > 0}, filtered_docs={len(filtered_docs)}"
         )
 
         return {
             "retrieved_docs": filtered_docs,
-            "web_search": web_search,
         }
 
-    async def _query_rewrite_node(self, state: GraphState) -> dict[str, Any]:
-        """기존의 쿼리를 웹 검색에 최적화된 쿼리로 재작성"""
-        query = state.query
-
-        # 웹 검색을 위한 질문으로 재작성
-        input_data = {"query": query}
-        query_for_web_search = await asyncio.to_thread(
-            self._query_rewriter.invoke, input_data
-        )
-        logger.info(f"query_for_web_search={query_for_web_search}")
-
-        return {"query_for_web_search": query_for_web_search}
-
-    async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
-        """refined_question으로 웹 검색"""
-
-        query_for_web_search = state.query_for_web_search
-        retrieved_docs = state.retrieved_docs
-
-        if isinstance(query_for_web_search, dict):
-            query_for_web_search = query_for_web_search.get("query", "")
-        else:
-            query_for_web_search = str(query_for_web_search)
-
-        # 웹 검색 (TAVILY_API_KEY 미설정 시 스킵)
-        if self._web_search_tool is None:
-            logger.warning("TAVILY_API_KEY 미설정 — 웹 검색 스킵")
-            return {"retrieved_docs": retrieved_docs, "web_search": False}
-
-        raw_result = await asyncio.to_thread(
-            self._web_search_tool.invoke, query_for_web_search
-        )
-
-        if raw_result is None:
-            docs = []
-
-        elif isinstance(raw_result, str):
-            docs = [{"content": raw_result}]
-
-        elif hasattr(raw_result, "content"):
-            docs = [{"content": raw_result.content}]
-
-        elif isinstance(raw_result, list):
-            docs = raw_result
-
-        else:
-            docs = [{"content": str(raw_result)}]
-
-        contents = []
-        for d in docs:
-            if isinstance(d, dict):
-                contents.append(d.get("content", ""))
-            else:
-                contents.append(str(d))
-
-        web_results_text = "\n".join(contents)
-
-        web_doc = Document(
-            doc_id=f"web_{uuid.uuid4()}",
-            content=web_results_text,
-            metadata={"source": "web"},
-        )
-
-        new_docs = retrieved_docs + [web_doc]
-
-        return {"retrieved_docs": new_docs}
-
-    # async def _prompt_compression_node(self, state: GraphState) -> dict[str, Any]:
-    #     """query와 documents를 결합해서 프롬프트 생성 후 LongLLMLingua로 압축"""
+    # async def _query_rewrite_node(self, state: GraphState) -> dict[str, Any]:
+    #     """기존의 쿼리를 웹 검색에 최적화된 쿼리로 재작성"""
     #     query = state.query
+
+    #     # 웹 검색을 위한 질문으로 재작성
+    #     input_data = {"query": query}
+    #     query_for_web_search = await asyncio.to_thread(
+    #         self._query_rewriter.invoke, input_data
+    #     )
+    #     logger.info(f"query_for_web_search={query_for_web_search}")
+
+    #     return {"query_for_web_search": query_for_web_search}
+
+    # async def _web_search_node(self, state: GraphState) -> dict[str, Any]:
+    #     """refined_question으로 웹 검색"""
+
+    #     query_for_web_search = state.query_for_web_search
     #     retrieved_docs = state.retrieved_docs
 
-    #     if self._prompt_compressor is None:
-    #         self._prompt_compressor = PromptCompressor("microsoft/phi-2")
+    #     if isinstance(query_for_web_search, dict):
+    #         query_for_web_search = query_for_web_search.get("query", "")
+    #     else:
+    #         query_for_web_search = str(query_for_web_search)
 
-    #     context_text = self._build_context(retrieved_docs)
+    #     # 웹 검색 (TAVILY_API_KEY 미설정 시 스킵)
+    #     if self._web_search_tool is None:
+    #         logger.warning("TAVILY_API_KEY 미설정 — 웹 검색 스킵")
+    #         return {"retrieved_docs": retrieved_docs, "web_search": False}
 
-    #     results = self._prompt_compressor.compress_prompt(
-    #         context_text,
-    #         question=query,
-    #         ratio=0.55,
-    #         # Set the special parameter for LongLLMLingua
-    #         condition_in_question="after_condition",
-    #         reorder_context="sort",
-    #         dynamic_context_compression_ratio=0.3,
-    #         condition_compare=True,
-    #         context_budget="+100",
-    #         rank_method="longllmlingua",
+    #     raw_result = await asyncio.to_thread(
+    #         self._web_search_tool.invoke, query_for_web_search
     #     )
 
-    #     compressed_prompt = results["compressed_prompt"]
+    #     if raw_result is None:
+    #         docs = []
 
-    #     return {"prompt": compressed_prompt}
+    #     elif isinstance(raw_result, str):
+    #         docs = [{"content": raw_result}]
 
-    def _decide_to_web_search(self, state: GraphState):
-        """grade_documents 노드에서 판별한 웹 검색 필요여부에 따라 쿼리를 routing"""
-        web_search = state.web_search
+    #     elif hasattr(raw_result, "content"):
+    #         docs = [{"content": raw_result.content}]
 
-        if web_search:
-            # 웹 검색으로 정보 보강이 필요한 경우 쿼리 재작성 노드로 라우팅
-            return "query_rewrite"
-        else:
-            # 관련 문서가 존재하므로 답변 생성 단계(generate) 로 진행
-            return "generate"
+    #     elif isinstance(raw_result, list):
+    #         docs = raw_result
+
+    #     else:
+    #         docs = [{"content": str(raw_result)}]
+
+    #     contents = []
+    #     for d in docs:
+    #         if isinstance(d, dict):
+    #             contents.append(d.get("content", ""))
+    #         else:
+    #             contents.append(str(d))
+
+    #     web_results_text = "\n".join(contents)
+
+    #     web_doc = Document(
+    #         doc_id=f"web_{uuid.uuid4()}",
+    #         content=web_results_text,
+    #         metadata={"source": "web"},
+    #     )
+
+    #     new_docs = retrieved_docs + [web_doc]
+
+    #     return {"retrieved_docs": new_docs}
+
+    # def _decide_to_web_search(self, state: GraphState):
+    #     """grade_documents 노드에서 판별한 웹 검색 필요여부에 따라 쿼리를 routing"""
+    #     web_search = state.web_search
+
+    #     if web_search:
+    #         # 웹 검색으로 정보 보강이 필요한 경우 쿼리 재작성 노드로 라우팅
+    #         return "query_rewrite"
+    #     else:
+    #         # 관련 문서가 존재하므로 답변 생성 단계(generate) 로 진행
+    #         return "generate"
 
     def _prepare_messages(self, chat_history: list[Message]) -> list[Any]:
         """
