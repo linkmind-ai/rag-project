@@ -44,9 +44,9 @@ def _extract_node_outputs(raw_result: dict[str, Any]) -> dict[str, Any]:
     raw_result에서 각 LangGraph 노드 출력을 명시적 변수로 분리.
 
     Returns:
-        노드별 출력이 담긴 dict
-    Raises:
-        ValueError: 컨텍스트가 비어 있을 때
+        노드별 출력이 담긴 dict.
+        filtered_docs=0(grade 후 관련 문서 없음)이면 contexts=[]이며,
+        이때 answer에는 LLM의 "정보를 찾을 수 없습니다" 거절 답변이 담긴다.
     """
     answer: str = raw_result["answer"]  # N6: generate
     hypothetical_doc: str = raw_result.get("hypothetical_doc", "")  # N1: hyde
@@ -61,8 +61,9 @@ def _extract_node_outputs(raw_result: dict[str, Any]) -> dict[str, Any]:
         doc.content if hasattr(doc, "content") else doc["content"] for doc in all_docs
     ]
 
-    if not contexts:
-        raise ValueError("컨텍스트 없음")
+    # contexts가 비어도 스킵하지 않는다 — filtered_docs=0일 때 LLM은
+    # "Notion 페이지에서 해당 정보를 찾을 수 없습니다."를 답변하며,
+    # 이 거절 답변도 RAGAS 평가 대상(올바른 거절 여부)에 포함되어야 한다.
 
     return {
         "answer": answer,
@@ -136,9 +137,6 @@ async def _run_single_sample(
 
         node_outputs = _extract_node_outputs(raw_result)
 
-    except ValueError as exc:
-        print(f"  ⚠️  컨텍스트 없음 스킵: {query[:50]} ({exc})")
-        return None
     except asyncio.TimeoutError:
         print(f"  ⏱ 타임아웃 스킵 ({_QUERY_TIMEOUT_S}s 초과): {query[:50]!r}")
         return None
