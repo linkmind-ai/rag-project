@@ -3,17 +3,21 @@ LangGraph 기반 RAG 워크플로우 모듈.
 
 이 모듈은 검색-증강-생성(RAG) 파이프라인의 핵심 오케스트레이션을 담당합니다.
 
-워크플로우 구조 (3-노드 순차 실행):
-┌─────────────┐    ┌─────────────┐    ┌───────────────────┐
-│  retrieve   │ -> │  generate   │ -> │ identify_evidence │
-│ (하이브리드 │    │ (LLM 응답   │    │ (근거 문서 식별)  │
-│  검색)      │    │  생성)      │    │                   │
-└─────────────┘    └─────────────┘    └───────────────────┘
+워크플로우 구조 (4-노드 순차 실행):
+┌──────────┐   ┌──────────────────┐   ┌──────────┐   ┌───────────────────┐
+│ retrieve │ ->│ grade_documents  │ ->│ generate │ ->│ identify_evidence │
+│ (하이브  │   │ (검색 문서       │   │ (LLM 응답│   │ (근거 문서 식별)  │
+│  리드)   │   │  관련성 필터링)  │   │  생성)   │   │                   │
+└──────────┘   └──────────────────┘   └──────────┘   └───────────────────┘
 
 핵심 기능:
 - N1: 하이브리드 검색 (벡터 + BM25)
-- N2: 컨텍스트 기반 응답 생성 (대화 이력 지원)
-- N3: LLM + 키워드 하이브리드 근거 식별
+- N2: 검색 문서 관련성 grading (관련 없는 문서 필터링)
+- N3: 컨텍스트 기반 응답 생성 (대화 이력 지원)
+- N4: LLM + 키워드 하이브리드 근거 식별
+
+참고: 웹 검색 폴백(query_rewrite·search_web)과 HyDE 노드는 파이프라인에서 제거됨.
+      관련 코드는 향후 재도입을 위해 주석으로 보존되어 있음.
 """
 
 import asyncio
@@ -105,17 +109,19 @@ class RAGGraph:
     """
     LangGraph 기반 RAG 워크플로우 관리 클래스.
 
-    이 클래스는 검색-생성-근거식별의 3단계 파이프라인을 구성하고 실행합니다.
+    이 클래스는 검색-grading-생성-근거식별의 4단계 파이프라인을 구성하고 실행합니다.
     StateGraph를 사용하여 각 노드 간 상태 전달과 순차 실행을 보장합니다.
 
     Attributes:
         _llm: Ollama LLM 인스턴스 (지연 초기화)
+        _grader_llm: 문서 관련성 grading 전용 LLM 인스턴스
         _graph: 컴파일된 LangGraph StateGraph
         _initialized: 초기화 완료 플래그 (Double-Checked Locking용)
         _lock: 동시성 제어를 위한 비동기 락
         chat_prompt: 단일 쿼리용 프롬프트 템플릿
         chat_with_history_prompt: 대화 이력 포함 프롬프트 템플릿
         get_evidence_prompt: 근거 문서 식별용 프롬프트 템플릿
+        grade_document_prompt: 검색 문서 관련성 grading용 프롬프트 템플릿
     """
 
     def __init__(self) -> None:
@@ -262,10 +268,21 @@ class RAGGraph:
         │  │       ↓ 상태 병합 (기존 상태 + 출력)                        │     │
         │  └─────────────────────────────────────────────────────────────┘     │
         │      │                                                               │
-        │      │ edge: "retrieve" → "generate"                                │
+        │      │ edge: "retrieve" → "grade_documents"                         │
         │      ▼                                                               │
         │  ┌─────────────────────────────────────────────────────────────┐     │
-        │  │ [N2] generate 노드                                          │     │
+        │  │ [N2] grade_documents 노드                                   │     │
+        │  │ ─────────────────────────────────────────────────────────── │     │
+        │  │ 입력: query, retrieved_docs                                 │     │
+        │  │ 처리: grader LLM으로 문서별 관련성 평가 (relevance ≥ 0.5)   │     │
+        │  │ 출력: {"retrieved_docs": [관련 문서만 필터링]}              │     │
+        │  │       ↓ 상태 병합 (관련 없는 문서 제거)                     │     │
+        │  └─────────────────────────────────────────────────────────────┘     │
+        │      │                                                               │
+        │      │ edge: "grade_documents" → "generate"                         │
+        │      ▼                                                               │
+        │  ┌─────────────────────────────────────────────────────────────┐     │
+        │  │ [N3] generate 노드                                          │     │
         │  │ ─────────────────────────────────────────────────────────── │     │
         │  │ 입력: query, retrieved_docs, chat_history                   │     │
         │  │ 처리: LLM에 프롬프트 + 컨텍스트 전달                        │     │
@@ -276,7 +293,7 @@ class RAGGraph:
         │      │ edge: "generate" → "identify_evidence"                       │
         │      ▼                                                               │
         │  ┌─────────────────────────────────────────────────────────────┐     │
-        │  │ [N3] identify_evidence 노드                                 │     │
+        │  │ [N4] identify_evidence 노드                                 │     │
         │  │ ─────────────────────────────────────────────────────────── │     │
         │  │ 입력: query, answer, retrieved_docs                         │     │
         │  │ 처리: 하이브리드 근거 식별 (LLM + 키워드 매칭)              │     │
@@ -291,9 +308,9 @@ class RAGGraph:
         │    query: "사용자 질문",                                             │
         │    session_id: "세션ID",                                             │
         │    chat_history: [이전 대화],                                        │
-        │    retrieved_docs: [문서1, 문서2, 문서3],  ← N1에서 채워짐           │
-        │    answer: "LLM 답변",                     ← N2에서 채워짐           │
-        │    evidence_indices: [0, 2]               ← N3에서 채워짐           │
+        │    retrieved_docs: [문서1, 문서2],        ← N1 채움 / N2 필터링      │
+        │    answer: "LLM 답변",                     ← N3에서 채워짐           │
+        │    evidence_indices: [0, 2]               ← N4에서 채워짐           │
         │  }                                                                   │
         │                                                                      │
         │  ※ 상태 병합 규칙: 노드 반환값의 키가 기존 상태를 덮어씀             │
@@ -577,13 +594,13 @@ class RAGGraph:
 
     async def _identify_evidence_node(self, state: GraphState) -> dict[str, Any]:
         """
-        답변 근거 문서 식별 노드 (N3 하이브리드 로직).
+        답변 근거 문서 식별 노드 (N4 하이브리드 로직).
 
         이 노드는 LLM 기반 추론과 키워드 매칭을 결합하여
         답변의 근거가 된 문서를 정확하게 식별합니다.
 
         ┌─────────────────────────────────────────────────────────┐
-        │                N3 하이브리드 근거 식별 로직              │
+        │                N4 하이브리드 근거 식별 로직              │
         ├─────────────────────────────────────────────────────────┤
         │ 1단계: 키워드 기반 후보 추출                             │
         │   - 답변과 문서 간 키워드 일치도 계산                    │
@@ -659,7 +676,7 @@ class RAGGraph:
         )
         keyword_indices = {idx for idx, _, _ in keyword_candidates}
 
-        logger.debug("[N3] 키워드 기반 후보: {}", keyword_candidates[:5])
+        logger.debug("[N4] 키워드 기반 후보: {}", keyword_candidates[:5])
 
         # ========== 2단계: LLM 기반 근거 식별 ==========
         documents_text = "\n\n".join(
@@ -686,7 +703,7 @@ class RAGGraph:
 
             # 유효 범위 필터링 (인덱스 범위 초과 방지)
             llm_indices = [idx for idx in llm_indices if 0 <= idx < len(retrieved_docs)]
-            logger.debug("[N3] LLM 선택 인덱스: {}", llm_indices)
+            logger.debug("[N4] LLM 선택 인덱스: {}", llm_indices)
 
             # ═══════════════════════════════════════════════════════════════
             # [3단계] 하이브리드 결합: LLM + 키워드 매칭 교차 검증
@@ -709,7 +726,7 @@ class RAGGraph:
                 if overlap_ratio >= reinforce_threshold:
                     if idx not in final_indices_set:
                         logger.debug(
-                            "[N3] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
+                            "[N4] 키워드 기반 보강: 문서 {} (일치도: {:.2%}, 키워드: {})",
                             idx,
                             overlap_ratio,
                             list(matched)[:5],
@@ -737,14 +754,14 @@ class RAGGraph:
                     )
                     if overlap < hallucination_threshold:
                         logger.debug(
-                            "[N3] 낮은 일치도로 제거: 문서 {} (일치도: {:.2%})",
+                            "[N4] 낮은 일치도로 제거: 문서 {} (일치도: {:.2%})",
                             idx,
                             overlap,
                         )
                         final_indices_set.discard(idx)
 
             final_indices = sorted(final_indices_set)
-            logger.info("[N3] 최종 evidence_indices: {}", final_indices)
+            logger.info("[N4] 최종 evidence_indices: {}", final_indices)
 
             return {"evidence_indices": final_indices}
 

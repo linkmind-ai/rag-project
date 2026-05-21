@@ -7,7 +7,7 @@ test_e2e.py — 전체 RAG 파이프라인 E2E RAGAS 평가 (테스트 클래스
   ─────────────────────────────  ────────────────────────────────────────
   ES store 직접 호출             RAGService.process_query()
   하드코딩 테스트 프롬프트        apps/prompts/chat_prompt.py (운영 프롬프트)
-  HyDE / grade / evidence 없음   N1~N7 전 노드 실행
+  grade / evidence 없음          N1~N4 전 노드 실행 (retrieve→grade→generate→evidence)
 
 [실행]
   pytest tests/ragas_e2e/test_e2e.py::TestRAGASE2EQwen25 -v -s
@@ -96,7 +96,7 @@ class TestRAGASE2EGPT:
         golden_set = json.loads(path.read_text(encoding="utf-8"))
 
         print(
-            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 7노드)"
+            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 4노드)"
         )
 
         return asyncio.run(build_e2e_dataset(golden_set))
@@ -143,12 +143,12 @@ class TestRAGASE2EGPT:
 
         assert f_score >= FAITHFULNESS_THRESHOLD, (
             f"Faithfulness {f_score:.1%} < {FAITHFULNESS_THRESHOLD:.0%}\n"
-            "  → N6 chat_prompt.py 지시 강화 / N3 grade 기준 조정"
+            "  → N3 chat_prompt.py 지시 강화 / N2 grade 기준 조정"
         )
 
         assert cp_score >= CONTEXT_PRECISION_THRESHOLD, (
             f"ContextPrecision {cp_score:.1%} < {CONTEXT_PRECISION_THRESHOLD:.0%}\n"
-            "  → N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정"
+            "  → N1 retrieve 하이브리드 가중치 조정 / N2 grade 기준 조정"
         )
 
     def test_generation_metrics(
@@ -204,7 +204,7 @@ class TestRAGASE2EGPT:
 
         assert cr_score >= CONTEXT_RECALL_THRESHOLD, (
             f"ContextRecall {cr_score:.1%} < {CONTEXT_RECALL_THRESHOLD:.0%}\n"
-            "  → TOP_K_RESULTS 증가 / N3 grade 기준 완화"
+            "  → TOP_K_RESULTS 증가 / N2 grade 기준 완화"
         )
 
 
@@ -248,7 +248,7 @@ class TestRAGASE2EQwen25:
         path = resolve_golden_set(request.config.getoption("--golden-set"))
         golden_set = json.loads(path.read_text(encoding="utf-8"))
         print(
-            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 7노드)"
+            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 4노드)"
         )
         return asyncio.run(build_e2e_dataset(golden_set))
 
@@ -261,8 +261,8 @@ class TestRAGASE2EQwen25:
         Faithfulness + ContextPrecision.
 
         미달 시 E2E 관점 개선 방향:
-          Faithfulness    → N6 chat_prompt.py 지시 강화 / N3 grade 기준 완화
-          ContextPrecision → N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정
+          Faithfulness    → N3 chat_prompt.py 지시 강화 / N2 grade 기준 완화
+          ContextPrecision → N1 retrieve 하이브리드 가중치 조정 / N2 grade 기준 조정
         """
         from ragas import evaluate
         from ragas.metrics import ContextPrecision, Faithfulness
@@ -299,11 +299,11 @@ class TestRAGASE2EQwen25:
 
         assert f_score >= FAITHFULNESS_THRESHOLD, (
             f"Faithfulness {f_score:.1%} < {FAITHFULNESS_THRESHOLD:.0%}\n"
-            "  → N6 chat_prompt.py 지시 강화 / N3 grade 기준 조정"
+            "  → N3 chat_prompt.py 지시 강화 / N2 grade 기준 조정"
         )
         assert cp_score >= CONTEXT_PRECISION_THRESHOLD, (
             f"ContextPrecision {cp_score:.1%} < {CONTEXT_PRECISION_THRESHOLD:.0%}\n"
-            "  → N1 HyDE 프롬프트 개선 / N2 하이브리드 가중치 조정"
+            "  → N1 retrieve 하이브리드 가중치 조정 / N2 grade 기준 조정"
         )
 
     def test_generation_metrics(
@@ -316,7 +316,7 @@ class TestRAGASE2EQwen25:
 
         미달 시 E2E 관점 개선 방향:
           AnswerRelevancy → chat_prompt.py에 질문 재인용 지시 추가 (refactoring_log 방향 B)
-          ContextRecall   → TOP_K_RESULTS 증가 / N3 grade 기준 완화
+          ContextRecall   → TOP_K_RESULTS 증가 / N2 grade 기준 완화
 
         strictness=1: Ollama는 n>1 복수 completion 미지원.
         """
@@ -363,7 +363,7 @@ class TestRAGASE2EQwen25:
         )
         assert cr_score >= CONTEXT_RECALL_THRESHOLD, (
             f"ContextRecall {cr_score:.1%} < {CONTEXT_RECALL_THRESHOLD:.0%}\n"
-            "  → TOP_K_RESULTS 증가 / N3 grade 기준 완화"
+            "  → TOP_K_RESULTS 증가 / N2 grade 기준 완화"
         )
 
 
@@ -417,7 +417,7 @@ class TestRAGASE2EGroq:
         path = resolve_golden_set(request.config.getoption("--golden-set"))
         golden_set = json.loads(path.read_text(encoding="utf-8"))
         print(
-            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 7노드)"
+            f"\n  E2E 파이프라인 시작... ({len(golden_set)}개 쿼리, {path.name}, 전체 4노드)"
         )
         return asyncio.run(build_e2e_dataset(golden_set))
 

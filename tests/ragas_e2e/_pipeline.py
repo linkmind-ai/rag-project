@@ -1,17 +1,17 @@
 """
 _pipeline.py — 전체 RAG 파이프라인 실행 로직
 
-RAGService.process_query()를 통해 LangGraph 전체 7노드를 실행하고
+RAGService.process_query()를 통해 LangGraph 전체 4노드를 실행하고
 RAGAS EvaluationDataset과 파이프라인 진단 목록을 반환.
 
 노드 실행 순서:
-  N1: hyde            — 가상 문서 생성 (rewriter LLM)
-  N2: retrieve        — HyDE+query 결합 hybrid_search
-  N3: grade_documents — 쿼리-문서 관련성 grading (grader LLM)
-  N4: query_rewrite   — 웹 검색용 쿼리 재작성 (web_search=True 시)
-  N5: search_web      — Tavily 웹 검색 (web_search=True 시)
-  N6: generate        — 운영 chat_prompt.py 사용 답변 생성 (main LLM)
-  N7: identify_evidence — 하이브리드 근거 식별
+  N1: retrieve        — hybrid_search (벡터 + BM25)
+  N2: grade_documents — 쿼리-문서 관련성 grading (grader LLM, relevance ≥ 0.5)
+  N3: generate        — 운영 chat_prompt.py 사용 답변 생성 (main LLM)
+  N4: identify_evidence — 하이브리드 근거 식별
+
+참고: HyDE / query_rewrite / search_web(웹 검색 폴백) 노드는 파이프라인에서 제거됨.
+      hypothetical_doc · web_search_triggered 진단 필드는 호환용 기본값("" / False)으로 유지.
 
 [PyCharm 디버깅]
   _run_single_sample() 내부 '# --- BREAKPOINT ---' 위치에서
@@ -44,15 +44,23 @@ def _extract_node_outputs(raw_result: dict[str, Any]) -> dict[str, Any]:
     raw_result에서 각 LangGraph 노드 출력을 명시적 변수로 분리.
 
     Returns:
-        노드별 출력이 담긴 dict
-    Raises:
-        ValueError: 컨텍스트가 비어 있을 때
+        노드별 출력이 담긴 dict.
+        filtered_docs=0(grade 후 관련 문서 없음)이면 contexts=[]이며,
+        이때 answer에는 LLM의 "정보를 찾을 수 없습니다" 거절 답변이 담긴다.
     """
-    answer: str = raw_result["answer"]  # N6: generate
-    hypothetical_doc: str = raw_result.get("hypothetical_doc", "")  # N1: hyde
-    web_search_triggered: bool = raw_result.get("web_search", False)  # N3: grade
-    all_docs: list[Any] = raw_result.get("all_docs", [])  # N2: retrieve
-    evidence_indices: list[int] = raw_result.get("evidence_indices", [])  # N7
+    answer: str = raw_result["answer"]  # N3: generate
+    hypothetical_doc: str = raw_result.get(
+        "hypothetical_doc", ""
+    )  # 레거시(HyDE 제거): 항상 ""
+    web_search_triggered: bool = raw_result.get(
+        "web_search", False
+    )  # 레거시(웹검색 제거): 항상 False
+    all_docs: list[Any] = raw_result.get(
+        "all_docs", []
+    )  # N1 retrieve → N2 grade 후 문서
+    evidence_indices: list[int] = raw_result.get(
+        "evidence_indices", []
+    )  # N4: identify_evidence
     evidence_docs: list[Any] = raw_result.get("evidence_docs", [])
     elapsed_time: float = raw_result.get("elapsed_time", 0.0)
 
@@ -61,8 +69,9 @@ def _extract_node_outputs(raw_result: dict[str, Any]) -> dict[str, Any]:
         doc.content if hasattr(doc, "content") else doc["content"] for doc in all_docs
     ]
 
-    if not contexts:
-        raise ValueError("컨텍스트 없음")
+    # contexts가 비어도 스킵하지 않는다 — filtered_docs=0일 때 LLM은
+    # "Notion 페이지에서 해당 정보를 찾을 수 없습니다."를 답변하며,
+    # 이 거절 답변도 RAGAS 평가 대상(올바른 거절 여부)에 포함되어야 한다.
 
     return {
         "answer": answer,
@@ -77,8 +86,6 @@ def _extract_node_outputs(raw_result: dict[str, Any]) -> dict[str, Any]:
 
 def _print_node_summary(query: str, node_outputs: dict[str, Any]) -> None:
     """노드별 진단 정보를 콘솔에 출력."""
-    hypothetical_doc = node_outputs["hypothetical_doc"]
-    web_search_triggered = node_outputs["web_search_triggered"]
     contexts = node_outputs["contexts"]
     evidence_indices = node_outputs["evidence_indices"]
     elapsed_time = node_outputs["elapsed_time"]
@@ -86,17 +93,10 @@ def _print_node_summary(query: str, node_outputs: dict[str, Any]) -> None:
 
     print(f"\n  Q : {query[:65]}...")
     print(
-        f"  N1 HyDE     : {hypothetical_doc[:60]}..."
-        if hypothetical_doc
-        else "  N1 HyDE     : (없음)"
+        f"  N1 Retrieve + N2 Grade : {len(contexts)}개 문서 통과 | "
+        f"N4 Evidence: {evidence_indices} | ⏱ {elapsed_time:.1f}s"
     )
-    print(
-        f"  N3 Grade    : {'웹검색 경로 (N4→N5)' if web_search_triggered else '생성 경로 (N6)'}"
-    )
-    print(
-        f"  N2 Retrieve : {len(contexts)}개 | N7 Evidence: {evidence_indices} | ⏱ {elapsed_time:.1f}s"
-    )
-    print(f"  N6 Answer   : {answer[:80]}...")
+    print(f"  N3 Answer : {answer[:80]}...")
 
 
 # ── 단일 샘플 실행 ────────────────────────────────────────────────────────────
@@ -136,9 +136,6 @@ async def _run_single_sample(
 
         node_outputs = _extract_node_outputs(raw_result)
 
-    except ValueError as exc:
-        print(f"  ⚠️  컨텍스트 없음 스킵: {query[:50]} ({exc})")
-        return None
     except asyncio.TimeoutError:
         print(f"  ⏱ 타임아웃 스킵 ({_QUERY_TIMEOUT_S}s 초과): {query[:50]!r}")
         return None

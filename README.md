@@ -31,8 +31,9 @@ LinkMind는 사용자의 문서를 기반으로 **맥락 있는 답변**을 생�
 
 ## Key Features
 
-- **Corrective RAG**: 문서 관련성 평가 후 웹 검색으로 fallback하는 adaptive 파이프라인
-- **하이브리드 검색**: Vector(cosine similarity) + BM25 키워드 검색 결합으로 recall 저하 완화
+- **문서 관련성 필터링**: 검색 문서를 grader LLM으로 평가해 관련 없는 문서를 제거하고, 근거가 없으면 환각 대신 "정보 없음"으로 응답
+- **하이브리드 검색**: Vector(cosine similarity) + BM25 키워드 검색을 RRF로 결합하여 recall 저하 완화
+- **근거 추적**: 답변 생성 후 근거가 된 문서를 LLM + 키워드 하이브리드로 식별 (citation)
 - **멀티턴 대화**: 세션 기반 대화 이력 관리로 이전 문맥을 반영한 응답 생성
 - **스트리밍 응답**: SSE(Server-Sent Events) 기반 실시간 토큰 스트리밍
 - **비동기 처리**: FastAPI + aiohttp 비동기 파이프라인으로 I/O 병목 최소화
@@ -64,35 +65,32 @@ flowchart TB
         direction LR
         G1["retrieve"]:::gnode
         G2["grade_documents"]:::gnode
-        G3["query_rewrite\n→ search_web"]:::gnode
-        G4["generate"]:::gnode
-        G1 --> G2
-        G2 -->|관련 없음| G3 --> G4
-        G2 -->|관련 있음| G4
+        G3["generate"]:::gnode
+        G4["identify_evidence"]:::gnode
+        G1 --> G2 --> G3 --> G4
     end
 
     ES["ElasticsearchStore\nhybrid search (kNN + BM25)"]:::store
 
     ESDB[("Elasticsearch")]:::ext
     OLLAMA["Ollama\nLLM + bge-m3 Embeddings"]:::ext
-    TAVILY["Tavily API"]:::ext
     NOTION["Notion API"]:::ext
 
     C --> R --> S --> G
     G1 -.-> ES --> ESDB
     ES -.->|임베딩| OLLAMA
-    G3 -.-> TAVILY
+    G2 -.->|grader LLM| OLLAMA
+    G3 -.->|LLM| OLLAMA
     R -.->|/notion| NOTION
 ```
 
-### Corrective RAG Pipeline
+### RAG Pipeline
 
 ```mermaid
 flowchart TD
     classDef io       fill:#0f172a,stroke:#334155,color:#f1f5f9,rx:16,ry:16
     classDef process  fill:#1e3a5f,stroke:#2563eb,color:#dbeafe
-    classDef decide   fill:#7c2d12,stroke:#ea580c,color:#fed7aa
-    classDef web      fill:#3b0764,stroke:#9333ea,color:#e9d5ff
+    classDef grade    fill:#7c2d12,stroke:#ea580c,color:#fed7aa
 
     START(["Query"]):::io
 
@@ -101,42 +99,30 @@ flowchart TD
     end
 
     subgraph SG2["  N2 · Grade Documents  "]
-        G["쿼리-문서 관련성 평가"]:::process
+        G["쿼리-문서 관련성 평가\n관련 없는 문서 제거"]:::grade
     end
 
-    DEC{{"web_search?"}}:::decide
-
-    subgraph SG3["  N3 · Query Rewrite  "]
-        QR["웹 검색용\n쿼리 재작성"]:::web
+    subgraph SG3["  N3 · Generate  "]
+        GEN["LLM 답변 생성\n근거 없으면 '정보 없음'"]:::process
     end
 
-    subgraph SG4["  N4 · Web Search  "]
-        WS["Tavily Search API\n외부 문서 수집"]:::web
-    end
-
-    subgraph SG5["  N5 · Generate  "]
-        GEN["LLM 답변 생성"]:::process
+    subgraph SG4["  N4 · Identify Evidence  "]
+        EV["LLM + 키워드 하이브리드\n근거 문서 식별"]:::process
     end
 
     END(["Final Answer"]):::io
 
     START --> R
     R --> G
-    G --> DEC
-    DEC -- "True\n관련 문서 없음" --> QR
-    DEC -- "False\n관련 문서 있음" --> GEN
-    QR --> WS
-    WS --> GEN
-    GEN --> END
+    G --> GEN
+    GEN --> EV
+    EV --> END
 
     linkStyle 0 stroke:#ffffff,stroke-width:2px
     linkStyle 1 stroke:#ffffff,stroke-width:2px
     linkStyle 2 stroke:#ffffff,stroke-width:2px
-    linkStyle 3 stroke:#3b82f6,stroke-width:2px
-    linkStyle 4 stroke:#ef4444,stroke-width:2px
-    linkStyle 5 stroke:#ffffff,stroke-width:2px
-    linkStyle 6 stroke:#ffffff,stroke-width:2px
-    linkStyle 7 stroke:#ffffff,stroke-width:2px
+    linkStyle 3 stroke:#ffffff,stroke-width:2px
+    linkStyle 4 stroke:#ffffff,stroke-width:2px
 ```
 
 ### Hybrid Search
@@ -295,19 +281,19 @@ curl -X POST http://localhost:8000/query \
 
 ## Evaluation
 
-> 평가 기준일: 2026-04-14
+> 평가 기준일: 2026-05-18
 > Judge 모델: `gpt-4o-mini`
-> 데이터셋: `golden_set_138.json` (138개 쿼리)
+> 데이터셋: `golden_set_100.json` (100개 쿼리, closed-domain)
 > 상세 리포트: [`tests/ragas_report.md`](tests/ragas_report.md)
 
 ### RAGAS Evaluation Results
 
-| 지표 | 점수 |
-|------|-----:|
-| Faithfulness (충실도) | **0.8719** |
-| Context Precision (문맥 정밀도) | **0.8901** |
-| Context Recall (문맥 재현율) | **0.7654** |
-| Answer Relevancy (답변 관련성) | **0.5402** |
+| 지표 | 점수 | 임계값 |
+|------|-----:|-----:|
+| Faithfulness (충실도) | **0.8372** | 0.70 ✅ |
+| Context Precision (문맥 정밀도) | **0.9617** | 0.70 ✅ |
+| Context Recall (문맥 재현율) | **0.8908** | 0.60 ✅ |
+| Answer Relevancy (답변 관련성) | **0.5968** | 0.60 ❌ |
 
 ### Running Tests
 

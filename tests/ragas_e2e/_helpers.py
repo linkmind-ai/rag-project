@@ -107,7 +107,8 @@ def save_e2e_result(
     RAGAS 점수(ragas_e2e_result.json) + 파이프라인 진단(ragas_e2e_diagnostics.json) 저장.
 
     기존 점수는 merge하여 누적 (회차별 비교 가능).
-    진단 파일에는 HyDE 출력, 웹검색 여부, 근거 인덱스 등 노드별 중간 결과 포함.
+    진단 파일에는 통과 컨텍스트 수, 근거 인덱스, 처리 시간 등 노드별 중간 결과 포함.
+    (hypothetical_doc·web_search_triggered는 HyDE/웹검색 제거 후 호환용 기본값으로만 유지)
     """
     existing: dict = {}
     if result_path.exists():
@@ -123,7 +124,7 @@ def save_e2e_result(
 
     result_out = {
         "evaluated_at": datetime.now().isoformat(),
-        "pipeline": "RAGService.process_query() → RAGGraph (N1~N7)",
+        "pipeline": "RAGService.process_query() → RAGGraph (N1~N4: retrieve→grade_documents→generate→identify_evidence)",
         "summary": {
             **merged,
             **{
