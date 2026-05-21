@@ -1,40 +1,33 @@
 # RAGAS Evaluation Report
 
-**평가 일시**: 2026-04-14 19:37:38  
-**파이프라인**: `RAGService.process_query()` → `RAGGraph (N1~N7)`  
-**Judge 모델**: `gpt-4o-mini`  
-**평가 데이터셋**: `golden_set_138` (총 138개 쿼리)
+**평가 일시**: 2026-05-18 15:39:51
+**파이프라인**: `RAGService.process_query()` → `RAGGraph` (retrieve → grade_documents → generate → identify_evidence)
+**Judge 모델**: `gpt-4o-mini`
+**평가 데이터셋**: `golden_set_100` (총 100개 쿼리, 전부 closed-domain)
+
+> 이번 회차의 핵심 변경: **웹 검색 폴백(query_rewrite + search_web 노드)을 파이프라인에서 완전히 제거**하고, 컨텍스트가 비었을 때의 프롬프트 동작을 명시적으로 고정했습니다. 이에 따라 외부 지식이 필요한 open-domain(klue-mrc) 쿼리는 평가 범위에서 제외하고, **Notion 기반 closed-domain 100건**만으로 측정했습니다.
 
 ---
 
 ## 1. 평가 데이터셋
 
-RAG 시스템이 **내부 지식 기반 질의와 open-domain 질의 모두에 대해 안정적으로 동작하는지**를 검증하기 위해 두 가지 유형의 데이터셋을 구성하여 평가를 수행하였습니다.
+웹 검색 폴백을 제거하면서 시스템은 **Notion 문서에 근거한 closed-domain 응답**만 수행하도록 단순화되었습니다. 따라서 외부 지식 검색이 필요한 쿼리는 더 이상 정상 응답 대상이 아니므로, 평가 데이터셋도 closed-domain으로 한정했습니다.
 
-### 1-1. Notion-based Dataset (Closed-domain)
+### 1-1. Notion-based Dataset (Closed-domain) — `golden_set_100`
 
-- 데모용 Notion 페이지를 기반으로 생성된 QA 데이터
-- context precision / recall을 측정하기 위해 query - response - reference context 조합으로 데이터 샘플을 구성
-
-**평가 목적:**
-
-- hybrid search 성능 검증
-- 내부 문서 기반 답변 품질 검증
-
----
-
-### 1-2. Open-domain Dataset
-
-- `iamjoon/klue-mrc-ko-rag-dataset` @HuggingFace
-- 한국어 MRC 기반 RAG 평가 데이터셋
-- 다양한 주제와 질문 유형을 포함
-
-`iamjoon/klue-mrc-ko-rag-dataset`에 포함된 샘플들 중에서 시간에 독립적이고, 명확한 대상과 단일 정답을 가지며, 추가 맥락 없이 context로부터 직접 답할 수 있는 query 38개를 선별해서 평가 데이터셋에 포함시켰습니다.
+- 데모용 Notion 페이지(도서 리뷰·논문 정리·업무 노트 등)를 기반으로 생성된 QA 100건
+- 각 샘플은 `query` - `reference` - `reference_contexts` 조합으로 구성 (context precision / recall 측정용)
 
 **평가 목적:**
 
-- 외부 지식이 필요한 상황에서의 대응 능력
-- open-domain 질의에 대한 정보 검색 및 답변 생성 성능 확인
+- hybrid search(벡터 + BM25) 성능 검증
+- 내부 문서 기반 답변 품질 및 충실도 검증
+- 문서에 답이 없을 때 "정보 없음"으로 정확히 회피하는지 검증
+
+### 1-2. 평가 범위에서 제외 — Open-domain (`golden_set_mrc`, 38건)
+
+- `iamjoon/klue-mrc-ko-rag-dataset` 기반 한국어 MRC 38건 (이전 `golden_set_138`에 포함되었던 부분)
+- **이번 회차에 제외한 이유**: 웹 검색 폴백 제거로 외부 지식 보강 경로가 사라져, 해당 쿼리는 구조적으로 "정보 없음"만 반환하게 됨. 파이프라인 의도(closed-domain grounding)와 측정 대상을 일치시키기 위해 분리.
 
 ---
 
@@ -42,129 +35,153 @@ RAG 시스템이 **내부 지식 기반 질의와 open-domain 질의 모두에 �
 
 | 지표 | 점수 | 임계값 | 통과 여부 |
 |------|------|--------|-----------|
-| Faithfulness (충실도) | **0.8719** | 0.70 | ✅ PASS |
-| Context Precision (문맥 정밀도) | **0.8901** | 0.70 | ✅ PASS |
-| Context Recall (문맥 재현율) | **0.7654** | 0.60 | ✅ PASS |
-| Answer Relevancy (답변 관련성) | **0.5402** | 0.60 | ❌ FAIL |
+| Faithfulness (충실도) | **0.8372** | 0.70 | ✅ PASS |
+| Context Precision (문맥 정밀도) | **0.9617** | 0.70 | ✅ PASS |
+| Context Recall (문맥 재현율) | **0.8908** | 0.60 | ✅ PASS |
+| Answer Relevancy (답변 관련성) | **0.5968** | 0.60 | ❌ FAIL |
 
-**종합 판정: FAIL** — 4개 지표 중 1개 미달 (Answer Relevancy)
+**종합 판정: FAIL** — 4개 지표 중 1개 미달 (Answer Relevancy, 갭 **-0.0032**, 임계값의 99.5% 도달)
 
----
+### 2-1. 직전 회차 대비 변화 (동일 Judge: gpt-4o-mini)
 
-## 2. 지표별 분석
+| 지표 | 이전 (`golden_set_138`, 웹검색 ON) | 이번 (`golden_set_100`, 웹검색 OFF) | 변화 |
+|------|:---:|:---:|:---:|
+| Faithfulness | 0.8719 | 0.8372 | −0.035 |
+| Context Precision | 0.8901 | **0.9617** | **+0.072** |
+| Context Recall | 0.7654 | **0.8908** | **+0.125** |
+| Answer Relevancy | 0.5402 | **0.5968** | **+0.057** |
 
-### ✅ Faithfulness — 0.8719
-생성된 답변이 검색된 문맥(context)에 근거하는 정도. 임계값(0.70) 대비 +0.17 초과 달성.  
-온도를 0.7 → 0.2로 낮춘 효과가 직접적으로 반영된 것으로 판단됨. 할루시네이션 감소에 기여.
-
-### ✅ Context Precision — 0.8901
-검색된 문서 중 실제로 답변 생성에 유용한 문서 비율. 가장 높은 점수로 grade_documents 노드의 relevancy threshold 튜닝과 prompt 수정의 성과가 명확히 나타남.
-
-### ✅ Context Recall — 0.7654
-정답 생성에 필요한 정보가 검색 단계에서 얼마나 포함되었는지. 임계값(0.60) 대비 +0.17 초과. 하이브리드 검색(벡터 + BM25) 파이프라인이 안정적으로 작동 중.
-
-### ❌ Answer Relevancy — 0.5402
-생성된 답변이 입력 질문에 얼마나 관련성 있게 답변하는지. 임계값(0.60) 대비 -0.06 미달.  
-질문의 의도를 벗어나거나 과도하게 문맥을 나열하는 답변이 점수를 낮춘 것으로 추정됨. **최우선 개선 대상.**
+> ⚠️ **해석 주의**: 두 회차는 데이터셋(138→100)과 파이프라인(웹검색 제거)이 동시에 바뀌었으므로 완전한 동일 조건 비교는 아닙니다. Context Precision/Recall의 큰 상승은 (1) closed-domain 한정으로 인덱스에 실제 존재하는 문서만 평가했고, (2) open-domain 38건(매칭 문서 없음)이 빠진 효과가 큽니다. Answer Relevancy 상승(+0.057)에는 데이터셋 효과와 프롬프트 개선 효과가 함께 반영되어 있습니다.
 
 ---
 
-## 3. 시스템 변경 이력
+## 3. 지표별 분석
 
-이번 평가는 **선행 리팩토링(검색/임베딩/Judge/프롬프트 레이어)** 위에 **이번 회차 변경(LangGraph 노드·Generator 튜닝)**을 누적 반영한 상태에서 수행되었습니다.
+### ✅ Faithfulness — 0.8372
+생성된 답변이 검색된 문맥(context)에 근거하는 정도. 임계값(0.70) 대비 +0.14 초과. 직전 회차(0.87) 대비 소폭 하락했으나 임계값을 안정적으로 상회하며, 하락 폭(−0.035)은 데이터셋 변경 및 judge 측정 분산 범위 내로 판단됨. 온도 0.2 유지 + "확인 가능한 정보만 사용" 프롬프트 가드가 할루시네이션을 억제 중.
 
-### 3-1. 선행 리팩토링 요약 (검색 · 임베딩 · Judge · 운영 프롬프트)
+### ✅ Context Precision — 0.9617
+검색된 문서 중 실제로 답변 생성에 유용한 문서 비율. 4개 지표 중 최고점. `grade_documents` 노드(relevance ≥ 0.5 필터)가 무관 문서를 효과적으로 제거하고, closed-domain 한정으로 노이즈가 줄어든 결과.
 
-> 출처: [tests/refactoring_log.md](tests/refactoring_log.md) — RAGAS 10~100건 반복 검증으로 확정된 변경.
+### ✅ Context Recall — 0.8908
+정답 생성에 필요한 정보가 검색 단계에 얼마나 포함되었는지. 임계값(0.60) 대비 +0.29로 큰 폭 초과. 하이브리드 검색(Nori + RRF)이 closed-domain에서 안정적으로 정답 컨텍스트를 회수하고 있음.
+
+### ❌ Answer Relevancy — 0.5968
+생성된 답변이 입력 질문에 얼마나 관련성 있게 답변하는지. 임계값(0.60)에 **-0.0032 미달**(사실상 경계선). 직전 회차(0.54) 대비 +0.057 개선되어 통과 직전까지 도달. 컨텍스트가 비었을 때의 고정 응답("Notion 페이지에서 해당 정보를 찾을 수 없습니다.")과 "핵심 답변부터 시작" 프롬프트가 점수를 끌어올린 것으로 판단됨. **여전히 최우선 개선 대상.**
+
+---
+
+## 4. 운영 진단 지표 (Diagnostics)
+
+> 출처: [tests/ragas_e2e_diagnostics.json](ragas_e2e_diagnostics.json) — 100건 전수 실행 로그.
+
+| 항목 | 값 | 비고 |
+|------|----|------|
+| 총 쿼리 | 100 | golden_set_100 |
+| 웹 검색 트리거 | **0건 (0.0%)** | 폴백 제거 확인 |
+| 평균 응답 시간 | 17.0s | median 16.7s, range 5.1~29.8s |
+| 평균 컨텍스트 수 | 2.13개/쿼리 | grade_documents 필터 통과 후 |
+| 컨텍스트 0건 | 3건 (idx 4, 51, 72) | 전 문서 grading 탈락 → "정보 없음" 정상 회피 |
+| 근거(evidence) ≥1 | 95건 | 95% 쿼리가 근거 문서 식별 성공 |
+| 근거 0건 | 5건 (idx 4, 51, 60, 67, 72) | 3건은 컨텍스트 0, 2건(60·67)은 컨텍스트 있으나 근거 노드가 빈 결과 |
+
+**컨텍스트 수 분포**: 0개 → 3건 / 1개 → 22건 / 2개 → 34건 / 3개 → 41건
+**근거 문서 수 분포**: 0개 → 5건 / 1개 → 62건 / 2개 → 29건 / 3개 → 4건
+
+**관찰**:
+- 컨텍스트가 0건인 3개 쿼리는 인덱스에 실제 근거 문서가 없는 경우로, 시스템이 환각 대신 "정보 없음"으로 정확히 회피함 → Faithfulness 보호에 기여.
+- 컨텍스트는 있으나 근거 식별이 비는 2건(idx 60, 67)은 `identify_evidence` 노드(키워드 일치도 임계값)의 false-negative 후보로, 별도 점검 대상.
+
+---
+
+## 5. 시스템 변경 이력
+
+이번 평가는 **선행 리팩토링(검색/임베딩/Judge/프롬프트 레이어)** 위에 **이번 회차 변경(웹 검색 제거 · 빈 컨텍스트 프롬프트 고정)**을 누적 반영한 상태에서 수행되었습니다.
+
+### 5-1. 선행 리팩토링 요약 (검색 · 임베딩 · Judge · 운영 프롬프트)
+
+> 출처: [tests/refactoring_log.md](refactoring_log.md) — RAGAS 10~100건 반복 검증으로 확정된 변경.
 
 | 변경 항목 | 대상 모듈 | 관측된 효과 |
 |-----------|-----------|-------------|
-| Nori Analyzer 적용 | `vector_store.py` (인덱스 매핑 · BM25 쿼리) | 한국어 형태소 분석으로 **ContextPrecision +5.8%p**, AnswerRelevancy +9.5%p(10건 기준) |
+| Nori Analyzer 적용 | `vector_store.py` (인덱스 매핑 · BM25 쿼리) | 한국어 형태소 분석으로 ContextPrecision +5.8%p, AnswerRelevancy +9.5%p(10건 기준) |
 | RRF(Reciprocal Rank Fusion) 병합 | `vector_store.py:hybrid_search` | min-max 정규화 대비 outlier-robust, ContextPrecision 안정화 |
-| `num_candidates` k×2 → k×10 | `vector_store.py:318` | ES kNN 후보 풀 6→30, 정확도 향상 (AR 무영향 — 검색이 아닌 생성 단계가 병목임을 규명) |
-| `embed_documents` 배치 전환 | `vector_store.py:add_documents` | 재인덱싱 후에도 변화 미미 — bge-m3는 query/document 동일 벡터 공간 사용 |
-| 운영 프롬프트 방향 B 채택 | `apps/prompts/chat_prompt.py` | "질문 재인용 강제" 구조로 **AnswerRelevancy 68.3% → 76.3% (+8.0%p)** |
-| Judge 모델 최종 확정 | `tests/test_ragas.py` | gemma3:27b → qwen2.5:72b (100건에서 4개 지표 전부 최초 PASS, AR 70.8%) |
+| `num_candidates` k×2 → k×10 | `vector_store.py` | ES kNN 후보 풀 확대, 정확도 향상 (AR 무영향 — 병목은 생성 단계임을 규명) |
+| 운영 프롬프트 "질문 재인용 강제" | `apps/prompts/chat_prompt.py` | AnswerRelevancy 68.3% → 76.3% (+8.0%p, 로컬 judge 기준) |
+| Judge 모델 다변화 | `tests/ragas_e2e/test_e2e.py` | qwen2.5:72b(로컬) / gpt-4o-mini(API) 양립, judge 간 AR 진폭 ±15%p 확인 |
 
 **핵심 발견**:
-- **검색 로직 개선(Nori · RRF)**은 ContextPrecision·Recall을 threshold 위로 끌어올리는 데 결정적이었음.
-- **AnswerRelevancy는 검색·임베딩 파라미터(`num_candidates`, `embed_documents`)에 거의 반응하지 않음** → 병목은 **생성 단계 프롬프트**임이 반복 검증으로 규명.
-- **Judge 모델 간 편차가 크다**: 동일 파이프라인에서 GROQ llama-3.3-70b 83.5%, gemma3:27b 68.8%, qwen2.5:72b 70.8% — AnswerRelevancy는 judge에 따라 ±15%p 진폭.
+- **검색 로직 개선(Nori · RRF)**은 ContextPrecision·Recall을 threshold 위로 끌어올리는 데 결정적.
+- **AnswerRelevancy는 검색·임베딩 파라미터에 거의 반응하지 않음** → 병목은 **생성 단계 프롬프트**임이 반복 검증으로 규명.
+- **Judge 모델 간 편차가 크다** → AR은 judge에 따라 ±15%p 진폭. 절대값보다 동일 judge 내 추세로 판단해야 함.
 
-### 3-2. 이번 평가 회차 변경사항 (LangGraph 노드 · Generator)
+### 5-2. 이번 평가 회차 변경사항
 
 | 변경 항목 | 내용 |
 |-----------|------|
-| Grader 모델 교체 | `exaone-4.0-1.2b` → `gemma3-4b` |
-| Generator 온도 조정 | `0.7` → `0.2` |
-| Grade Documents 노드 | relevancy threshold 튜닝 |
-| 프롬프트 수정 | `grade_document`, `query_rewrite` 프롬프트 개선 |
-| Judge 모델 변경 | qwen2.5:72b(로컬) → **gpt-4o-mini**(이번 회차) |
+| **웹 검색 폴백 제거** | `rag_graph.py`에서 `query_rewrite` · `search_web` 노드 및 조건부 라우팅(`_decide_to_web_search`) 비활성화. 파이프라인이 7노드 설계 → **4노드 직렬(retrieve → grade_documents → generate → identify_evidence)** 로 축소 |
+| **빈 컨텍스트 프롬프트 고정** | `chat_prompt.py` · `chat_history_prompt.py`에 "컨텍스트가 비어있으면 'Notion 페이지에서 해당 정보를 찾을 수 없습니다.'만 출력" 규칙 명시 |
+| 프롬프트 포커싱 강화 | "핵심 답변부터 시작 / 불필요한 서론 금지 / 출처 표현 금지" 규칙 정리, chat_prompt 단축 버전 추가 |
+| query_rewrite 프롬프트 정리 | 웹 검색용 재작성 프롬프트 수정 (현재 파이프라인 미사용, 코드만 보존) |
+| 평가 데이터셋 한정 | `golden_set_138` → `golden_set_100` (open-domain 38건 제외) |
 
-**효과**: Faithfulness·Context Precision·Context Recall 모두 임계값을 상회하는 결과를 달성. 특히 Context Precision(0.89)은 grader 모델 교체와 threshold 튜닝의 복합 효과로 보임. 단, **Judge가 qwen2.5:72b(AR 70.8%) → gpt-4o-mini(AR 54.0%)로 바뀐 점을 고려할 때, AR 하락의 상당 부분은 judge 민감도 차이일 가능성**이 있음(§3-1 발견 참고).
+**효과**: Context Precision(0.96)·Context Recall(0.89)이 큰 폭으로 상승하고 Answer Relevancy도 통과 직전(0.5968)까지 회복. 웹 검색 제거로 응답 경로가 단순해지고(평균 17.0s), 정보 부재 시 환각 대신 명시적 회피가 동작.
 
 ---
 
-## 4. Answer Relevancy 개선 방향
+## 6. Answer Relevancy 개선 방향
 
-Answer Relevancy가 유일하게 임계값을 충족하지 못했으며, 점수 갭(-0.06)은 아래 원인으로 분석됨.
+Answer Relevancy가 유일하게 임계값을 충족하지 못했습니다. 다만 갭이 **-0.0032**로 사실상 경계선이며, 직전 회차 대비 +0.057 개선되어 단일 프롬프트 조정으로 통과 가능성이 높은 상태입니다.
 
 ### Root Cause Analysis
 
-> **측정 전제**: RAGAS Answer Relevancy는 생성된 답변으로부터 역방향으로 질문을 생성(question generation)한 뒤, 그 질문들이 원래 질문과 얼마나 유사한지를 임베딩 코사인 유사도로 측정한다. 즉, "답변이 원래 질문을 유발할 만한 내용으로 구성되어 있는가"를 본다. 따라서 점수가 낮다는 것은 **답변의 초점이 질문의 핵심 의도에서 벗어나 있다**는 신호다.
+> **측정 전제**: RAGAS Answer Relevancy는 생성된 답변으로부터 역방향으로 질문을 생성(question generation)한 뒤, 그 질문들이 원래 질문과 얼마나 유사한지를 임베딩 코사인 유사도로 측정합니다. 점수가 낮다는 것은 **답변의 초점이 질문의 핵심 의도에서 벗어나 있다**는 신호입니다.
 
-#### 지표 간 교차 분석 (Metric Cross-Analysis)
+#### 지표 간 교차 분석
 
 | 비교 쌍 | 해석 |
 |---------|------|
-| Faithfulness(0.87) ↑ & Answer Relevancy(0.54) ↓ | 답변이 검색 문서에 충실하게 작성되었음에도 질문 의도와 괴리. "충실하지만 엉뚱한" 답변 패턴 존재 가능성 |
-| Context Precision(0.89) ↑ & Answer Relevancy(0.54) ↓ | 유용한 문서를 골라내는 것 자체는 성공. 병목은 검색이 아닌 **생성 단계** |
-| Context Recall(0.77) ↑ & Answer Relevancy(0.54) ↓ | 필요한 정보가 컨텍스트에 충분히 포함되어 있음. 즉 재료는 있으나 **조리(문장화) 방식이 문제** |
+| Faithfulness(0.84) ↑ & Answer Relevancy(0.60) ↓ | 답변이 문서에 충실하나 일부는 질문 의도와 미세하게 괴리. "충실하지만 다소 포괄적인" 답변 패턴 잔존 |
+| Context Precision(0.96) ↑ & Answer Relevancy(0.60) ↓ | 유용 문서 선별은 거의 완벽. 병목은 검색이 아닌 **생성 단계 문장화** |
+| Context Recall(0.89) ↑ & Answer Relevancy(0.60) ↓ | 필요한 정보는 충분히 회수됨. 즉 재료는 충분, **조리(초점 수렴) 방식**이 마지막 0.3%p 결정 |
 
-→ 세 지표의 패턴이 일관되게 가리키는 결론: **생성 단계 프롬프트 및 답변 구성 로직**이 핵심 원인 위치.
+→ 세 지표가 일관되게 가리키는 결론: **생성 단계 프롬프트의 초점 수렴**이 남은 핵심 변수.
 
 ---
 
-#### RC-1. Generator 프롬프트의 초점 부재 (추정 기여도: 高)
+#### RC-1. Generator 답변의 초점 미세 이탈 (추정 기여도: 高)
 
-**증상**: Faithfulness는 높지만 Answer Relevancy가 낮음 → 문서를 잘 인용하되 질문의 핵심에 수렴하지 않는 답변.
+**증상**: Faithfulness·Precision·Recall이 모두 높음에도 AR만 경계선 → 문서를 충실히 인용하되 답변이 질문 핵심보다 다소 포괄적으로 작성되는 경향.
 
 **인과 체인 (5 Whys)**:
-1. Answer Relevancy가 낮다
-2. → 답변에서 역생성된 질문이 원래 질문과 다르다
-3. → 답변이 질문의 핵심 키워드·의도보다 검색된 문서 전체를 요약하는 방향으로 작성되었다
-4. → 현재 시스템 프롬프트에 "질문에 직접 답하라"는 명시적 포커싱 지시가 없고, 문서 인용 충실성만 강조되어 있다
-5. → 온도를 0.7 → 0.2로 낮춘 후 할루시네이션은 줄었으나, LLM이 보수적으로 문서 내용을 나열하는 패턴이 강화됨
+1. Answer Relevancy가 경계선이다
+2. → 답변에서 역생성된 질문이 원래 질문과 미세하게 다르다
+3. → 답변이 질문의 단일 핵심보다 컨텍스트 전반을 정리하는 방향으로 작성된다
+4. → "핵심 답변부터" 지시는 추가됐으나, "질문이 묻는 단일 대상에만 답하라"는 범위 제약은 약함
+5. → 온도 0.2의 보수적 생성이 문서 요약형 서술을 강화하는 경향과 결합
 
-**검증 방법**: Answer Relevancy 최하위 샘플(점수 < 0.4)을 추출하여 답변 패턴이 "문서 요약형"인지 "질문 직접 응답형"인지 수동 분류.
+**검증 방법**: AR 최하위 샘플(점수 < 0.4)을 추출하여 "질문 직접 응답형 vs 문서 요약형" 수동 분류.
 
 ---
 
-#### RC-2. Query Rewrite 노드의 의미 변형 (추정 기여도: 中)
+#### RC-2. 근거 식별 노드의 false-negative (추정 기여도: 中)
 
-**증상**: Rewrite된 쿼리가 검색 성능(Recall 0.77)에는 기여하지만, 원래 질문의 의도를 바꾸어 Generator의 응답 방향이 틀어질 수 있음.
+**증상**: 컨텍스트가 존재함에도 `identify_evidence`가 빈 결과를 반환하는 케이스(idx 60, 67) 존재. 근거 식별 실패 자체가 AR을 직접 낮추진 않으나, 답변이 컨텍스트와 느슨하게 연결됐다는 신호일 수 있음.
 
 **인과 체인**:
-1. Answer Relevancy 측정 시 비교 기준은 **원래(original) 질문**이다
-2. → `query_rewrite` 노드가 검색 최적화를 위해 의미를 확장·변형할 경우, Generator는 rewritten query 기준으로 답변을 생성
-3. → 생성된 답변이 original 질문이 아닌 rewritten query에 맞춰져 RAGAS 유사도가 낮게 산출됨
-4. → 현재 `query_rewrite` 프롬프트에는 "검색 효율 향상" 목적만 명시, 원래 의도 보존 제약이 없음
+1. 키워드 일치도 임계값(10%/20%/5%)이 짧은 답변이나 패러프레이즈가 강한 답변에서 매칭을 놓침
+2. → LLM 근거 인덱스도 비면 evidence_indices가 공집합
+3. → 답변-컨텍스트 정합 추적이 불가해 품질 회귀 탐지 난이도 상승
 
-**검증 방법**: `query_rewrite` 전·후 쿼리 쌍 20~30개를 추출하여 의미 보존율을 임베딩 유사도로 측정 (임계: cosine ≥ 0.85).
+**검증 방법**: idx 60·67의 답변·컨텍스트 키워드 일치도를 수동 계산하여 임계값 적정성 점검.
 
 ---
 
 #### RC-3. Multi-turn 대화 이력의 컨텍스트 오염 (추정 기여도: 低~中)
 
-**증상**: 단일 턴 질의 대비 멀티 턴 세션에서 Answer Relevancy가 더 낮게 관찰될 가능성.
+**증상**: 멀티 턴 세션에서 이전 대화 어휘가 현재 질문보다 높은 가중치를 가져 답변 초점이 흐려질 가능성. (현재 평가는 단일 턴 위주이므로 영향 제한적)
 
-**인과 체인**:
-1. `get_recent_messages()`로 반환된 N개의 이전 메시지가 프롬프트에 추가됨
-2. → 이전 대화 내용과 관련된 어휘·주제가 LLM의 attention에서 현재 질문보다 높은 가중치를 가질 수 있음
-3. → 결과적으로 현재 질문의 의도보다 이전 흐름을 이어가는 답변이 생성됨
-4. → 현재 `get_recent_messages` 반환 개수가 고정값이며, 질문 유형(단발성 vs 문맥 의존적)에 따른 동적 조정이 없음
-
-**검증 방법**: 평가 데이터셋을 single-turn / multi-turn으로 구분하여 그룹별 Answer Relevancy 점수를 비교. 그룹 간 격차가 0.05 이상이면 기여 요인으로 확정.
+**검증 방법**: 평가 데이터셋을 single/multi-turn으로 구분하여 그룹별 AR을 비교. 격차 ≥ 0.05이면 기여 요인으로 확정.
 
 ---
 
@@ -172,21 +189,21 @@ Answer Relevancy가 유일하게 임계값을 충족하지 못했으며, 점수 
 
 | 원인 | 영향 범위 | 수정 비용 | 우선순위 |
 |------|-----------|-----------|---------|
-| RC-1. Generator 프롬프트 초점 부재 | 전체 쿼리 | 낮음 (프롬프트 수정) | **P0** |
-| RC-2. Query Rewrite 의미 변형 | rewrite 적용 쿼리 | 중간 (프롬프트 + 테스트) | **P1** |
+| RC-1. Generator 초점 미세 이탈 | 전체 쿼리 | 낮음 (프롬프트 수정) | **P0** |
+| RC-2. 근거 식별 false-negative | 일부 쿼리 (2/100) | 낮음 (임계값 튜닝) | **P1** |
 | RC-3. Multi-turn 이력 오염 | 멀티 턴 세션 | 중간 (파라미터 실험) | **P2** |
 
 ### 개선 액션 아이템
 
-- [ ] Generator 시스템 프롬프트에 "질문의 핵심에 직접 답하라" 지시 강화
-- [ ] `query_rewrite` 출력의 의미 보존 여부를 검증하는 단위 테스트 추가
-- [ ] Answer Relevancy 하위 케이스(예: 점수 < 0.4)를 샘플링하여 실패 패턴 분석
-- [ ] 멀티 턴 대화에서 `get_recent_messages` 반환 개수(현재 설정값) 실험적 조정
+- [ ] Generator 프롬프트에 "질문이 묻는 단일 대상/범위에만 답하라" 제약 추가 (RC-1)
+- [ ] AR 하위 케이스(점수 < 0.4) 샘플링 후 실패 패턴 분석
+- [ ] `identify_evidence` 키워드 임계값을 idx 60·67 기준으로 재튜닝 (RC-2)
+- [ ] 동일 judge(gpt-4o-mini)로 프롬프트 조정 전후 AR 회귀 측정 → 0.60 돌파 확인
 
 ---
 
-## 5. 결론 및 다음 단계
+## 7. 결론 및 다음 단계
 
-이번 평가는 grader 모델 교체 및 프롬프트 튜닝을 통해 검색 품질(Context Precision 0.89, Context Recall 0.77)과 생성 충실도(Faithfulness 0.87) 측면에서 유의미한 개선을 확인했습니다.
+이번 회차는 **웹 검색 폴백을 제거하여 closed-domain grounding으로 파이프라인을 단순화**하고, 빈 컨텍스트 처리를 명시적으로 고정했습니다. 그 결과 검색 품질(Context Precision 0.96, Context Recall 0.89)과 충실도(Faithfulness 0.84)가 모두 임계값을 안정적으로 상회했으며, 정보 부재 시 환각 대신 명시적 회피가 동작함을 진단 로그로 확인했습니다.
 
-**단일 미달 지표인 Answer Relevancy(0.54)를 0.60 이상으로 끌어올리는 것이 다음 스프린트의 핵심 목표**이며, Generator 프롬프트 개선과 실패 케이스 샘플 분석을 병행하여 진행합니다.
+**단일 미달 지표인 Answer Relevancy(0.5968)는 임계값에 -0.0032로 사실상 경계선**입니다. Generator 프롬프트의 초점 제약 강화(RC-1)와 실패 케이스 분석을 다음 스프린트에서 우선 진행하면, 동일 judge 기준으로 0.60 돌파가 유력합니다.

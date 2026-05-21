@@ -189,7 +189,7 @@ class RAGService:
         │                    │                                            │
         │                    ▼                                            │
         │   5. 그래프 실행 (ainvoke)                                       │
-        │      └─ retrieve → generate → identify_evidence                 │
+        │      └─ retrieve → grade_documents → generate → identify_evidence│
         │                    │                                            │
         │                    ▼                                            │
         │   6. 결과 추출 및 근거 문서 필터링                               │
